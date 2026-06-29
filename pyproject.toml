@@ -1,0 +1,20 @@
+[project]
+name = "llm-wiki-cli"
+version = "0.1.0"
+description = "Scaffold an LLM-maintained knowledge wiki for use with Claude Code."
+requires-python = ">=3.11"
+dependencies = ["typer>=0.12", "rich>=13.0"]
+
+[project.scripts]
+llm-wiki = "wiki_cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/wiki_cli"]
+# template/ and assets/ live inside the package dir, so `packages` already ships
+# them as package data. `artifacts` overrides hatchling's default VCS/dotfile
+# exclusion so payload files like .gitkeep and .gitignore are not dropped.
+artifacts = ["src/wiki_cli/template/**", "src/wiki_cli/assets/**"]

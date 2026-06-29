@@ -1,0 +1,7 @@
+# Ignore Obsidian workspace and app configuration files
+**/.obsidian/workspace.json
+**/.obsidian/app.json
+**/.obsidian/appearance.json
+**/.obsidian/core-plugins.json
+__pycache__/
+*.py[cod]
