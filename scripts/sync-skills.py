@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Vendor the claude-wiki-skills marketplace into this CLI's package data.
+"""Vendor the shared wiki workflows into this CLI's package data.
 
 Reads skill, hook, and command files from a local ``claude-wiki-skills``
-checkout (a plain filesystem path — this script never fetches from git) and
-copies them into ``src/wiki_cli/assets/``. During the copy it rewrites the
-marketplace-only ``${CLAUDE_PLUGIN_ROOT}`` placeholder to
-``${CLAUDE_PROJECT_DIR}/.claude``, which is the path the vendored files live at
-once ``llm-wiki init`` writes them into a wiki's ``.claude/`` directory.
+checkout (a plain filesystem path; this script never fetches from Git) and
+copies them into ``src/wiki_cli/assets/``. The installer renders these shared
+sources into both Claude Code and Codex project locations. Marketplace-only
+``${CLAUDE_PLUGIN_ROOT}`` placeholders are rewritten for the Claude copy here;
+the Codex path substitution happens when the CLI renders integrations.
 
 Run this manually before each release whenever the skills repo changes:
 
@@ -75,6 +75,8 @@ def main(argv: list[str]) -> int:
         dst.parent.mkdir(parents=True, exist_ok=True)
         text = src.read_text(encoding="utf-8")
         rewritten = text.replace(PLUGIN_ROOT, PROJECT_ROOT)
+        if rel_dst == "commands/define-topic.md":
+            rewritten = rewritten.replace("`CLAUDE.md`", "`WIKI.md`")
         dst.write_text(rewritten, encoding="utf-8")
         # Preserve the executable bit for hook/lint scripts.
         if src.suffix == ".py":

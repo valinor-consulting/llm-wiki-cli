@@ -15,7 +15,7 @@ Read these files so you understand the conventions you're writing into:
 
 - `TOPIC.md` — the file you will rewrite. Note its four headings: `# Topic`,
   `## Topics to Cover`, `## Instructions for Each Topic`, `## Out of Scope`.
-- `CLAUDE.md` — the operating schema for this wiki (directory structure, page types,
+- `WIKI.md` — the operating schema for this wiki (directory structure, page types,
   frontmatter, operations). The topic you define has to fit this structure.
 - `llm-wiki.md` — background on the LLM Wiki pattern, so the scope you set is realistic for
   what the wiki can actually do.
