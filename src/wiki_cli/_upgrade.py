@@ -36,6 +36,7 @@ def _entrypoint(name: str) -> bytes:
 def _desired_upgrade_files() -> dict[str, tuple[bytes, bool]]:
     desired = _skills.rendered_files()
     desired["AGENTS.md"] = (_entrypoint("AGENTS.md"), False)
+    desired["CLAUDE.md"] = (_entrypoint("CLAUDE.md"), False)
     return desired
 
 
@@ -136,6 +137,17 @@ def upgrade(target: Path) -> UpgradeResult:
                     result.adopted.append(relative)
                     if executable:
                         _make_executable(destination)
+                elif (
+                    relative == "CLAUDE.md"
+                    and not wiki_schema.is_symlink()
+                    and wiki_schema.is_file()
+                    and wiki_schema.read_bytes() == current
+                ):
+                    # The legacy schema has been preserved byte-for-byte in
+                    # WIKI.md, so it is safe to turn CLAUDE.md into an entrypoint.
+                    destination.write_bytes(desired)
+                    managed[relative] = _digest(desired)
+                    result.updated.append(relative)
                 else:
                     result.conflicts.append(relative)
                 continue

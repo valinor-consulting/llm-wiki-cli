@@ -91,7 +91,7 @@ Then upgrade each existing wiki explicitly:
 llm-wiki upgrade /path/to/wiki
 ```
 
-The upgrade is additive and conflict-safe. It copies a legacy customized `CLAUDE.md` to `WIKI.md`, installs Codex support, and tracks CLI-managed files in `.llm-wiki.json`. A managed file is refreshed only while its recorded hash still matches. Customized or colliding files are preserved and reported for manual resolution. The command never changes wiki content, source documents, or Git state.
+The upgrade is additive and conflict-safe. It copies a legacy customized `CLAUDE.md` to `WIKI.md`, verifies the copy, then replaces `CLAUDE.md` with the small entrypoint used by new wikis. If an existing `WIKI.md` has diverged from `CLAUDE.md`, the latter is preserved and reported as a conflict. The command installs Codex support and tracks CLI-managed files in `.llm-wiki.json`; a managed file is refreshed only while its recorded hash still matches. It never changes wiki content, source documents, or Git state.
 
 ## Versioning
 

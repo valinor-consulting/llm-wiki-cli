@@ -196,7 +196,13 @@ def test_upgrade_legacy_wiki_preserves_content_and_is_idempotent(tmp_path):
     assert "WIKI.md" in first.created
     assert (target / "WIKI.md").read_text() == "# Customized schema\n"
     for relative, content in original.items():
+        if str(relative) == "CLAUDE.md":
+            continue
         assert (target / relative).read_bytes() == content
+    assert (target / "CLAUDE.md").read_bytes() == (
+        _upgrade._entrypoint("CLAUDE.md")
+    )
+    assert "CLAUDE.md" in first.updated
     assert (target / "AGENTS.md").exists()
     assert (target / ".codex" / "hooks.json").exists()
 
@@ -217,6 +223,17 @@ def test_upgrade_preserves_modified_managed_file(tmp_path):
     result = _upgrade.upgrade(target)
     assert "AGENTS.md" in result.conflicts
     assert agents.read_text() == "custom instructions\n"
+
+
+def test_upgrade_preserves_diverged_legacy_claude_file(tmp_path):
+    target = tmp_path / "legacy"
+    _legacy_wiki(target)
+    (target / "WIKI.md").write_text("# Independently edited schema\n", encoding="utf-8")
+
+    result = _upgrade.upgrade(target)
+    assert "CLAUDE.md" in result.conflicts
+    assert (target / "CLAUDE.md").read_text() == "# Customized schema\n"
+    assert (target / "WIKI.md").read_text() == "# Independently edited schema\n"
 
 
 def test_upgrade_adopts_identical_untracked_file(tmp_path):
