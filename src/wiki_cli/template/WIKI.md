@@ -26,27 +26,24 @@ wiki/
 
 ---
 
-## Frontmatter Schema
+## OKF Document Format
 
-Every file written in `wiki/` must include this YAML frontmatter:
+Every non-reserved file written in `wiki/` must use parseable YAML frontmatter with a non-empty `type`. `index.md` and `log.md` are reserved files and do not use concept frontmatter (the root `index.md` may declare `okf_version`).
 
 ```yaml
 ---
+type: Concept | Reference | Entity
 title: "<Page Title>"
-type: concept | source-summary | entity
 tags: [tag-one, tag-two]
-sources:                # one item per line; see formatting rule below
-  - "[[slug|Title]]"            # wiki/sources page
-  - "[Title](URL)"             # web source
-  - "[[filename.ext]]"          # raw vault file
-related:                # Obsidian wiki links to related wiki pages only — no plain titles
-  - "[[slug|Title]]"
+sources:
+  - resource: https://example.com/source
+    title: Source title
 created: YYYY-MM-DD
 updated: YYYY-MM-DD
 ---
 ```
 
-**Formatting rule — `sources:` and `related:` MUST use a block list with each item double-quoted** (one `  - "..."` per line, as shown above). Do **not** use YAML flow syntax (`sources: [ ... ]`) for these fields: any item containing a link begins with `[`, which YAML parses as a nested sequence and chokes on the trailing `(url)` or text — corrupting the entire frontmatter block (Obsidian renders it as red error text). The surrounding double quotes keep each `[...](...)` / `[[...]]` value as a literal string. If a list is empty, write `sources: []`. The `tags:` field holds plain strings, so inline `[a, b]` is fine there.
+`sources` is optional and contains external web provenance only. Each source has a required `resource` URL and an optional `title`. Preserve unknown frontmatter keys when editing existing documents.
 
 Always update the `updated:` field whenever a page is edited.
 
@@ -54,9 +51,11 @@ Always update the `updated:` field whenever a page is edited.
 
 ## Link Conventions
 
-- **Internal links** (between wiki files): Obsidian wiki syntax — `[[filename|Display Text]]` where `filename` is the file's slug without the `.md` extension (e.g., `[[concept-1-topic-page|Concept 1 Topic]]`). The filename is the link target Obsidian resolves; the display text is the human-readable title after the pipe.
+- **Internal links** (between wiki files): bundle-root Markdown paths — `[Display Text](/concepts/concept-page.md)`.
 - **External links** (web sources): standard markdown — `[text](url)`
-- Source URLs belong in the frontmatter `sources:` field AND may appear inline where relevant
+- Mirror every external `sources` entry in a terminal `## Citations` section.
+- Put internal cross-references accumulated for a page in a terminal `## Related Concepts` section.
+- Never use Obsidian `[[wiki links]]` in `wiki/` documents.
 
 ---
 
@@ -110,9 +109,9 @@ Triggered by: "ingest [source]" or "process [file]"
 2. Briefly discuss key takeaways with the user
 3. Create or update `wiki/sources/<slug>.md` with a structured summary
 4. Create or update relevant pages as appropriate, integrating source findings into the current synthesis
-5. Add or update `[[wiki links]]` bidirectionally between all touched pages
+5. Add or update standard Markdown links and terminal `## Related Concepts` sections for all touched pages
 6. Check for contradictions with existing wiki content:
-   - Flag on the relevant wiki page with a blockquote: `> **Contradiction noted:** [description] — see also [[Other Page]]`
+   - Flag on the relevant wiki page with a blockquote: `> **Contradiction noted:** [description] — see also [Other Page](/concepts/other-page.md)`
    - If multiple items need human clarification, add an **## Items Requiring Close Review** section to the source summary page listing each item
    - Walk through flagged items with the user one at a time, prompting for the correct answer
    - As each item is resolved, apply the correction, remove the blockquote flag from the relevant wiki page, and remove the item from the review section
@@ -129,7 +128,7 @@ Triggered by: "ingest [source]" or "process [file]"
 Triggered by: any question directed at the wiki
 
 1. Read `wiki/index.md` to identify relevant pages
-2. Read the relevant pages and synthesize an answer with `[[citations]]`
+2. Read the relevant pages and synthesize an answer with standard Markdown citations
 3. If the wiki lacks sufficient information: perform web research (see Web Research below), integrate findings into the wiki, then answer
 4. **Always file valuable answers as a new wiki page in the appropriate category** — questions are invitations to grow the wiki, not one-off answers. Treat each question as an opportunity to document reusable knowledge.
 5. Prepend a one-line entry to `wiki/log.md` (directly below the `# Wiki Log` heading — newest first):
@@ -146,7 +145,7 @@ Triggered by: a query gap, or explicit request like "research [topic]"
 2. Create a source summary page in `wiki/sources/`
 3. Update relevant `concepts/`, `sources/`, `outputs/`, or `entities/` pages with new information
 4. Follow the full Ingest cross-linking and consistency steps
-5. Record source URLs in frontmatter `sources:` fields
+5. Record external source URLs in structured frontmatter `sources:` entries and terminal `## Citations` sections
 
 ### Lint
 
@@ -155,7 +154,7 @@ Triggered by: "lint the wiki"
 1. Scan all wiki pages for:
    - Contradictions between pages
    - Stale claims superseded by newer sources
-   - Orphan pages with no inbound `[[links]]`
+   - Orphan pages with no inbound Markdown links
    - Concepts mentioned but lacking their own dedicated page
    - Missing bidirectional cross-references
    - Data gaps that could be filled with web research
@@ -171,7 +170,7 @@ Triggered by: "lint the wiki"
 
 ## Consistency Rules
 
-- **Bidirectional links:** Whenever a new page is created or a link is added, find the target page and add a reciprocal `[[link]]` back
+- **Bidirectional links:** Whenever a new page is created or a link is added, find the target page and add a reciprocal standard Markdown link back
 - **Contradiction handling:** Never silently overwrite conflicting information — flag it with the blockquote format above and surface it to the user
 - **Integrated content:** Wiki pages and best practices should read as current synthesized guidance, not as update logs. Put operational history in `wiki/log.md`, not in the body of content pages.
 - **Frontmatter discipline:** Always include complete frontmatter; always update `updated:` on edit
@@ -186,7 +185,7 @@ Triggered by: "lint the wiki"
 _Last updated: YYYY-MM-DD_
 
 ## Concepts
-- [[Concept Page]] — Brief description of concept
+- [Concept Page](/concepts/concept-page.md) — Brief description of concept
 - ...
 
 ## Entities
@@ -196,7 +195,7 @@ _Last updated: YYYY-MM-DD_
 - ...
 
 ## Sources
-- [[source-slug]] — Brief description | ingested YYYY-MM-DD
+- [Source](/sources/source-slug.md) — Brief description | ingested YYYY-MM-DD
 - ...
 ```
 
@@ -210,10 +209,10 @@ The log is **newest-first**: each new entry is prepended directly below the `# W
 # Wiki Log
 
 ## [YYYY-MM-DD] ingest | <Source Title>
-Created/updated [[Page A]], [[Page B]] from this source.
+Created/updated [Page A](/concepts/page-a.md), [Page B](/concepts/page-b.md) from this source.
 
 ## [YYYY-MM-DD] query | <question summary>
-Answered from [[Page A]], [[Page B]]; filed as [[New Page]].
+Answered from [Page A](/concepts/page-a.md), [Page B](/concepts/page-b.md); filed as [New Page](/concepts/new-page.md).
 
 ## [YYYY-MM-DD] lint | <summary>
 3 orphan pages, 2 missing cross-links — fixed. Research suggested: topic X.

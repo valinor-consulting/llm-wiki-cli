@@ -13,6 +13,7 @@ import sys
 
 IMMUTABLE_DIRS = ("raw", "Clippings")
 BAD_TABLE_LINK = re.compile(r"\[\[[^\]]*?(?<!\\)\|[^\]]*?\]\]")
+OBSIDIAN_LINK = re.compile(r"\[\[[^\]]+\]\]")
 FILE_HEADER = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$")
 MOVE_HEADER = re.compile(r"^\*\*\* Move to: (.+)$")
 
@@ -32,6 +33,11 @@ def immutable(path: str) -> str | None:
         if f"/{directory}/" in normalized:
             return directory
     return None
+
+
+def corpus_path(path: str) -> bool:
+    normalized = f"/{normalize(path).lstrip('/')}"
+    return "/wiki/" in normalized
 
 
 def parse_patch(command: str) -> list[dict[str, object]]:
@@ -107,6 +113,16 @@ def main() -> None:
                 "BLOCKED: this patch only adds or removes blank/whitespace lines. "
                 "Fold the change into a substantive edit or skip it."
             )
+
+        for change in files:
+            if not any(corpus_path(str(path)) for path in change["paths"]):
+                continue
+            offenders = [str(line).strip() for line in change["added"] if OBSIDIAN_LINK.search(str(line))]
+            if offenders:
+                block(
+                    "BLOCKED: OKF wiki documents use standard Markdown links, not "
+                    "Obsidian [[wiki links]]. Offending line(s):\n  " + "\n  ".join(offenders[:3])
+                )
 
         for change in files:
             markdown = any(str(path).lower().endswith(".md") for path in change["paths"])

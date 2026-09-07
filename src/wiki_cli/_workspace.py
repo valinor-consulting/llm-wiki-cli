@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import shutil
 from dataclasses import dataclass
 from importlib.resources import files
@@ -11,7 +12,7 @@ from pathlib import Path
 
 import typer
 
-from . import _skills, _upgrade
+from . import _okf, _skills, _upgrade
 
 MANIFEST_NAME = ".llm-wiki-workspace.json"
 SCHEMA_VERSION = 1
@@ -32,6 +33,14 @@ DUPLICATE_INTEGRATIONS = (
     ".codex/hooks.json",
     ".codex/hooks/guard-edits.py",
 )
+OKF_OVERRIDE_START = "<!-- llm-wiki:okf-format:start -->"
+OKF_OVERRIDE_END = "<!-- llm-wiki:okf-format:end -->"
+OKF_OVERRIDE = f"""{OKF_OVERRIDE_START}
+## OKF Format Override
+
+For every document in `wiki/`, use parseable YAML frontmatter with a non-empty OKF `type`. Use standard Markdown links, not Obsidian `[[wiki links]]`. Record external web provenance in structured `sources:` entries and mirror it in a terminal `## Citations` section. Put internal concept links in a terminal `## Related Concepts` section. Do not put legacy link strings in frontmatter `sources` or `related` fields. This override takes precedence over earlier format instructions.
+{OKF_OVERRIDE_END}
+"""
 
 
 def _digest(content: bytes) -> str:
@@ -205,6 +214,34 @@ def upgrade(root: Path, *, names: list[str] | None, apply: bool) -> list[WikiSta
     if not apply or any(item.state != "ready" for item in statuses):
         return statuses
     return [WikiStatus(name, "upgraded", _workspace_upgrade(target)) for name, target in selected]
+
+
+def migrate_okf(root: Path, *, names: list[str] | None, apply: bool) -> list[WikiStatus]:
+    """Preview or apply an all-or-nothing OKF migration for selected wikis."""
+    selected = selected_wikis(root, names)
+    plans: list[tuple[str, Path, _okf.MigrationPlan]] = []
+    statuses: list[WikiStatus] = []
+    for name, target in selected:
+        plan = _okf.build_plan(target / "wiki")
+        plans.append((name, target, plan))
+        if plan.issues:
+            statuses.append(WikiStatus(name, "blocked", "; ".join(plan.issues)))
+        else:
+            statuses.append(WikiStatus(name, "ready", f"{len(plan.changes)} corpus file(s) will change"))
+    if not apply or any(status.state == "blocked" for status in statuses):
+        return statuses
+    for name, target, plan in plans:
+        for path, content in plan.changes.items():
+            path.write_text(content, encoding="utf-8")
+        _append_okf_override(target / "WIKI.md")
+    return [WikiStatus(name, "migrated", f"{len(plan.changes)} corpus file(s) updated") for name, _target, plan in plans]
+
+
+def _append_okf_override(schema: Path) -> None:
+    text = schema.read_text(encoding="utf-8")
+    pattern = re.compile(rf"\n?{re.escape(OKF_OVERRIDE_START)}.*?{re.escape(OKF_OVERRIDE_END)}\n?", re.DOTALL)
+    text = pattern.sub("\n", text).rstrip() + "\n\n" + OKF_OVERRIDE
+    schema.write_text(text, encoding="utf-8")
 
 
 def _workspace_upgrade(target: Path) -> str:

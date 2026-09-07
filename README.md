@@ -15,7 +15,7 @@ uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git llm-wiki i
 Pin to a released tag for reproducibility:
 
 ```bash
-uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.3.3 llm-wiki init my-wiki
+uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.4.0 llm-wiki init my-wiki
 ```
 
 Install it as a persistent tool on your PATH:
@@ -80,7 +80,7 @@ llm-wiki --version
 
 ```bash
 uv tool install --force \
-  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.3.3 \
+  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.4.0 \
   llm-wiki-cli
 llm-wiki --version
 ```
@@ -103,9 +103,13 @@ llm-wiki workspace import /path/to/existing-wiki research --workspace /path/to/w
 llm-wiki workspace status /path/to/wiki-workspace
 llm-wiki workspace upgrade /path/to/wiki-workspace
 llm-wiki workspace upgrade /path/to/wiki-workspace --apply
+llm-wiki workspace migrate-okf /path/to/wiki-workspace --wiki research
+llm-wiki workspace migrate-okf /path/to/wiki-workspace --wiki research --apply
 ```
 
 Imports immediately migrate unchanged legacy integrations to the workspace layout. The upgrade command remains available for existing imported wikis and is read-only until `--apply` is supplied. In Claude Code or Codex, open the mono-repo root, name the wiki you want to work on, and let the root dispatcher load that wiki's local instructions.
+
+`workspace migrate-okf` is a separate, preview-first content migration. It converts a registered wiki corpus to the OKF v0.2 profile only after every selected wiki passes preflight.
 
 ## Versioning
 

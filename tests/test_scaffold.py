@@ -12,7 +12,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from wiki_cli import _scaffold, _skills, _upgrade, _workspace, app
+from wiki_cli import _okf, _scaffold, _skills, _upgrade, _workspace, app
 
 
 def test_copy_template_into_empty_dir(tmp_path):
@@ -170,10 +170,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.3.3")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.4.0")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.3.3"
+    assert result.output.strip() == "0.4.0"
 
 
 def _legacy_wiki(path):
@@ -366,6 +366,79 @@ def test_workspace_upgrade_preserves_duplicates_for_custom_schema(tmp_path):
     assert (root / "custom" / ".agents" / "skills" / "prose-voice" / "SKILL.md").exists()
 
 
+def test_okf_migration_previews_then_converts_links_sources_and_sections(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    wiki = root / "research"
+    CliRunner().invoke(app, ["init", str(wiki)])
+    concepts = wiki / "wiki" / "concepts"
+    sources = wiki / "wiki" / "sources"
+    concepts.mkdir(exist_ok=True)
+    sources.mkdir(exist_ok=True)
+    (wiki / "raw" / "notes.pdf").write_text("source", encoding="utf-8")
+    (sources / "reference.md").write_text(
+        "---\ntitle: Reference\ntype: source-summary\ntags: [x]\nsources:\n  - \"[Web](https://example.com)\"\nrelated: []\n---\n\nSource body.\n",
+        encoding="utf-8",
+    )
+    page = concepts / "topic.md"
+    original = """---
+title: Topic
+type: concept
+tags: [x]
+sources:
+  - "[[reference|Reference]]"
+  - "[[notes.pdf]]"
+related:
+  - "[[reference|Reference]]"
+created: 2026-01-01
+updated: 2026-01-02
+---
+
+See [[reference|the reference]].
+
+## Citations
+
+Existing citation prose.
+"""
+    page.write_text(original, encoding="utf-8")
+    manifest = json.loads((root / ".llm-wiki-workspace.json").read_text())
+    manifest["wikis"] = ["research"]
+    (root / ".llm-wiki-workspace.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    preview = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--wiki", "research"])
+    assert preview.exit_code == 0, preview.output
+    assert page.read_text() == original
+    applied = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--wiki", "research", "--apply"])
+
+    converted = page.read_text()
+    assert applied.exit_code == 0, applied.output
+    assert "type: Concept" in converted
+    assert "sources:" not in converted
+    assert "[notes.pdf](../../raw/notes.pdf)" in converted
+    assert "[Reference](/sources/reference.md)" in converted
+    assert "## Related Concepts" in converted
+    assert "Existing citation prose." in converted
+    assert 'okf_version: "0.2"' in (wiki / "wiki" / "index.md").read_text()
+    assert _workspace.OKF_OVERRIDE_START in (wiki / "WIKI.md").read_text()
+
+
+def test_okf_migration_blocks_all_selected_wikis_on_unresolved_link(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    wiki = root / "broken"
+    CliRunner().invoke(app, ["init", str(wiki)])
+    page = wiki / "wiki" / "concepts" / "broken.md"
+    page.write_text("---\ntype: concept\nsources: [\"[[missing]]\"]\n---\n", encoding="utf-8")
+    manifest = json.loads((root / ".llm-wiki-workspace.json").read_text())
+    manifest["wikis"] = ["broken"]
+    (root / ".llm-wiki-workspace.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--apply"])
+
+    assert result.exit_code == 1
+    assert page.read_text() == "---\ntype: concept\nsources: [\"[[missing]]\"]\n---\n"
+
+
 def _run_codex_hook(tmp_path, patch):
     target = tmp_path / "wiki"
     target.mkdir(exist_ok=True)
@@ -417,7 +490,7 @@ def _run_claude_hook(tmp_path, name, payload):
                 "tool_name": "Write",
                 "tool_input": {
                     "file_path": "wiki/page.md",
-                    "content": "| Topic | [[slug|Title]] |",
+                    "content": "See [[slug|Title]].",
                 },
             },
         ),
@@ -454,11 +527,11 @@ def test_codex_hook_blocks_blank_only_patch(tmp_path):
 def test_codex_hook_blocks_bad_table_link(tmp_path):
     patch = (
         "*** Begin Patch\n*** Update File: wiki/page.md\n@@\n"
-        "+| Topic | [[slug|Title]] |\n*** End Patch"
+        "+See [[slug|Title]].\n*** End Patch"
     )
     result = _run_codex_hook(tmp_path, patch)
     assert result.returncode == 2
-    assert "unescaped" in result.stderr
+    assert "Obsidian" in result.stderr
 
 
 def test_codex_hook_checks_every_file_in_multi_file_patch(tmp_path):
@@ -474,7 +547,7 @@ def test_codex_hook_checks_every_file_in_multi_file_patch(tmp_path):
 def test_codex_hook_allows_valid_edit_and_malformed_input(tmp_path):
     patch = (
         "*** Begin Patch\n*** Update File: wiki/page.md\n@@\n-old\n"
-        "+| Topic | [[slug\\|Title]] |\n*** End Patch"
+        "+See [Title](/concepts/slug.md).\n*** End Patch"
     )
     assert _run_codex_hook(tmp_path, patch).returncode == 0
 

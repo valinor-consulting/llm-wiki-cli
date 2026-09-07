@@ -134,6 +134,22 @@ def workspace_upgrade(
         console.print("Read-only plan. Re-run with --apply to make changes.")
 
 
+@workspace_app.command("migrate-okf")
+def workspace_migrate_okf(
+    directory: str = typer.Argument(".", help="Workspace root (default: current directory)."),
+    wiki: list[str] = typer.Option(None, "--wiki", help="Registered wiki to select; repeatable."),
+    apply: bool = typer.Option(False, "--apply", help="Apply a fully preflighted OKF migration."),
+) -> None:
+    """Preview or apply the OKF v0.2 migration for registered wiki corpora."""
+    items = _workspace.migrate_okf(Path(directory), names=wiki or None, apply=apply)
+    for item in items:
+        console.print(f"{item.name}: [bold]{item.state}[/bold]" + (f" ({item.detail})" if item.detail else ""))
+    if any(item.state == "blocked" for item in items):
+        raise typer.Exit(code=1)
+    if not apply:
+        console.print("Read-only plan. Re-run with --apply to make changes.")
+
+
 @workspace_app.command("import")
 def workspace_import(
     source: str = typer.Argument(..., help="Existing LLM wiki directory to import."),

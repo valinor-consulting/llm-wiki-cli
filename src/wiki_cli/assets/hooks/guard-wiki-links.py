@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-# PreToolUse guard — blocks piped wiki links inside Markdown table cells with
-# an unescaped pipe. Obsidian reads the pipe as a column delimiter, so the link
-# fails to render.
+# PreToolUse guard — blocks Obsidian wiki links inside the OKF wiki corpus.
 # Exit 0 = allow.  Exit 2 = block (stderr is fed back to the model as the reason).
 # Fails OPEN on any internal error: a bug here must never wedge a legitimate edit.
 
@@ -31,7 +29,7 @@ def main():
 
     try:
         path = str(ti.get("file_path") or "")
-        if not path.endswith(".md"):
+        if not path.endswith(".md") or "/wiki/" not in f"/{path.replace(chr(92), '/')}":
             sys.exit(0)
 
         new_texts = []
@@ -43,21 +41,19 @@ def main():
             for e in (ti.get("edits") or []):
                 new_texts.append(str(e.get("new_string") or ""))
 
-        bad_link = re.compile(r"\[\[[^\]]*?(?<!\\)\|[^\]]*?\]\]")
+        bad_link = re.compile(r"\[\[[^\]]+\]\]")
         offenders = []
         for text in new_texts:
             for line in text.splitlines():
-                if line.lstrip().startswith("|") and bad_link.search(line):
+                if bad_link.search(line):
                     offenders.append(line.strip())
 
         if offenders:
             sample = "\n  ".join(offenders[:3])
             block(
-                "BLOCKED: this edit places a piped wiki link inside a Markdown "
-                "table cell with an unescaped '|'. Obsidian treats that pipe as a "
-                "column separator, so the link will not render. Fix: escape it as "
-                r"[[target\|Display]] (backslash before the pipe), or when Display "
-                f"equals the slug just write [[slug]]. Offending line(s):\n  {sample}"
+                "BLOCKED: wiki corpus documents use standard Markdown links under "
+                "the OKF profile, not Obsidian [[wiki links]]. Offending line(s):\n  "
+                + sample
             )
     except Exception:
         pass
