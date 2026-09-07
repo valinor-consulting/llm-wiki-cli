@@ -15,7 +15,7 @@ uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git llm-wiki i
 Pin to a released tag for reproducibility:
 
 ```bash
-uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.2.0 llm-wiki init my-wiki
+uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.3.0 llm-wiki init my-wiki
 ```
 
 Install it as a persistent tool on your PATH:
@@ -80,7 +80,7 @@ llm-wiki --version
 
 ```bash
 uv tool install --force \
-  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.2.0 \
+  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.3.0 \
   llm-wiki-cli
 llm-wiki --version
 ```
@@ -92,6 +92,20 @@ llm-wiki upgrade /path/to/wiki
 ```
 
 The upgrade is additive and conflict-safe. It copies a legacy customized `CLAUDE.md` to `WIKI.md`, verifies the copy, then replaces `CLAUDE.md` with the small entrypoint used by new wikis. If an existing `WIKI.md` has diverged from `CLAUDE.md`, the latter is preserved and reported as a conflict. The command installs Codex support and tracks CLI-managed files in `.llm-wiki.json`; a managed file is refreshed only while its recorded hash still matches. It never changes wiki content, source documents, or Git state.
+
+## Mono-Repo Workspaces
+
+Use a workspace when one repository contains several independent LLM wikis. The repository root is a dispatcher, not a wiki: each registered top-level directory keeps its own `TOPIC.md`, `WIKI.md`, and content.
+
+```bash
+llm-wiki workspace init /path/to/wiki-workspace
+llm-wiki workspace import /path/to/existing-wiki research --workspace /path/to/wiki-workspace
+llm-wiki workspace status /path/to/wiki-workspace
+llm-wiki workspace upgrade /path/to/wiki-workspace
+llm-wiki workspace upgrade /path/to/wiki-workspace --apply
+```
+
+The first upgrade command is read-only. It checks every registered wiki before `--apply` makes any changes. In Claude Code or Codex, open the mono-repo root, name the wiki you want to work on, and let the root dispatcher load that wiki's local instructions.
 
 ## Versioning
 

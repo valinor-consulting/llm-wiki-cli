@@ -7,12 +7,14 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from . import _scaffold, _skills, _upgrade
+from . import _scaffold, _skills, _upgrade, _workspace
 
 app = typer.Typer(
     add_completion=False,
     help="Scaffold and upgrade an LLM-maintained knowledge wiki for Claude Code and Codex.",
 )
+workspace_app = typer.Typer(help="Manage a mono-repo containing registered LLM wikis.")
+app.add_typer(workspace_app, name="workspace")
 console = Console()
 
 
@@ -93,6 +95,54 @@ def upgrade(
         raise typer.Exit(code=1)
     if not any((result.created, result.updated, result.adopted)):
         console.print("  Already up to date.")
+
+
+@workspace_app.command("init")
+def workspace_init(
+    directory: str = typer.Argument(".", help="Workspace root (default: current directory)."),
+) -> None:
+    """Initialize a multi-wiki workspace without creating a wiki at its root."""
+    _workspace.init(Path(directory))
+    console.print(f"[green]✓[/green] Created wiki workspace in [bold]{Path(directory).expanduser().resolve()}[/bold]")
+
+
+@workspace_app.command("status")
+def workspace_status(
+    directory: str = typer.Argument(".", help="Workspace root (default: current directory)."),
+) -> None:
+    """Show registered wiki readiness without making changes."""
+    items = _workspace.status(Path(directory))
+    if not items:
+        console.print("No wikis registered.")
+    for item in items:
+        console.print(f"{item.name}: [bold]{item.state}[/bold]" + (f" ({item.detail})" if item.detail else ""))
+
+
+@workspace_app.command("upgrade")
+def workspace_upgrade(
+    directory: str = typer.Argument(".", help="Workspace root (default: current directory)."),
+    wiki: list[str] = typer.Option(None, "--wiki", help="Registered wiki to select; repeatable."),
+    apply: bool = typer.Option(False, "--apply", help="Apply a conflict-free upgrade plan."),
+) -> None:
+    """Plan or apply upgrades for registered wikis."""
+    items = _workspace.upgrade(Path(directory), names=wiki or None, apply=apply)
+    for item in items:
+        console.print(f"{item.name}: [bold]{item.state}[/bold]" + (f" ({item.detail})" if item.detail else ""))
+    if any(item.state == "conflict" for item in items):
+        raise typer.Exit(code=1)
+    if not apply:
+        console.print("Read-only plan. Re-run with --apply to make changes.")
+
+
+@workspace_app.command("import")
+def workspace_import(
+    source: str = typer.Argument(..., help="Existing LLM wiki directory to import."),
+    name: str | None = typer.Argument(None, help="Top-level destination directory name."),
+    directory: str = typer.Option(".", "--workspace", help="Workspace root (default: current directory)."),
+) -> None:
+    """Copy a standalone wiki into this workspace, excluding its .git directory."""
+    imported = _workspace.import_wiki(Path(directory), Path(source), name)
+    console.print(f"[green]✓[/green] Imported and registered [bold]{imported}[/bold]")
 
 
 def main() -> None:

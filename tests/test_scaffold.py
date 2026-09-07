@@ -12,7 +12,7 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from wiki_cli import _scaffold, _skills, _upgrade, app
+from wiki_cli import _scaffold, _skills, _upgrade, _workspace, app
 
 
 def test_copy_template_into_empty_dir(tmp_path):
@@ -170,10 +170,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.2.0")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.3.0")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.2.0"
+    assert result.output.strip() == "0.3.0"
 
 
 def _legacy_wiki(path):
@@ -262,6 +262,63 @@ def test_upgrade_malformed_manifest_aborts_before_writes(tmp_path):
 def test_upgrade_rejects_non_wiki(tmp_path):
     with pytest.raises(typer.BadParameter):
         _upgrade.upgrade(tmp_path)
+
+
+def test_workspace_init_creates_root_integrations_without_wiki(tmp_path):
+    root = tmp_path / "workspace"
+    result = CliRunner().invoke(app, ["workspace", "init", str(root)])
+
+    assert result.exit_code == 0, result.output
+    manifest = json.loads((root / ".llm-wiki-workspace.json").read_text())
+    assert manifest["wikis"] == []
+    assert (root / "AGENTS.md").exists()
+    assert (root / ".agents" / "skills" / "select-wiki" / "SKILL.md").exists()
+    assert not (root / "TOPIC.md").exists()
+
+
+def test_workspace_import_excludes_git_and_registers_wiki(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    source = tmp_path / "source-wiki"
+    CliRunner().invoke(app, ["init", str(source)])
+    (source / ".git").mkdir()
+    (source / ".git" / "config").write_text("private", encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["workspace", "import", str(source), "research", "--workspace", str(root)])
+
+    assert result.exit_code == 0, result.output
+    assert (root / "research" / "TOPIC.md").exists()
+    assert not (root / "research" / ".git").exists()
+    assert _workspace.status(root)[0].state == "ready"
+
+
+def test_workspace_upgrade_is_read_only_until_apply_and_preflights_all(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    for name in ("one", "two"):
+        wiki = root / name
+        CliRunner().invoke(app, ["init", str(wiki)])
+    manifest = json.loads((root / ".llm-wiki-workspace.json").read_text())
+    manifest["wikis"] = ["one", "two"]
+    (root / ".llm-wiki-workspace.json").write_text(json.dumps(manifest), encoding="utf-8")
+    original = (root / "one" / "AGENTS.md").read_bytes()
+    (root / "two" / "AGENTS.md").write_text("custom", encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["workspace", "upgrade", str(root), "--apply"])
+
+    assert result.exit_code == 1
+    assert (root / "one" / "AGENTS.md").read_bytes() == original
+    assert "two: conflict" in result.output
+
+
+def test_workspace_rejects_unregistered_selection(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+
+    result = CliRunner().invoke(app, ["workspace", "upgrade", str(root), "--wiki", "missing"])
+
+    assert result.exit_code != 0
+    assert "Unregistered wiki" in result.output
 
 
 def _run_codex_hook(tmp_path, patch):
