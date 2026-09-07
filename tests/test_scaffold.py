@@ -171,10 +171,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.4.2")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.4.4")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.4.2"
+    assert result.output.strip() == "0.4.4"
 
 
 def _legacy_wiki(path):
@@ -274,6 +274,7 @@ def test_workspace_init_creates_root_integrations_without_wiki(tmp_path):
     assert manifest["wikis"] == []
     assert (root / "AGENTS.md").exists()
     assert (root / ".gitignore").read_bytes() == (Path(__file__).parents[1] / "src" / "wiki_cli" / "template" / ".gitignore").read_bytes()
+    assert (root / "insights" / ".gitkeep").exists()
     assert (root / ".agents" / "skills" / "select-wiki" / "SKILL.md").exists()
     assert not (root / "TOPIC.md").exists()
 
@@ -324,6 +325,49 @@ def test_workspace_upgrade_is_read_only_until_apply_and_preflights_all(tmp_path)
     assert result.exit_code == 1
     assert (root / "one" / "AGENTS.md").read_bytes() == original
     assert "two: conflict" in result.output
+
+
+def test_workspace_upgrade_adds_insights_to_existing_workspace(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    insights = root / "insights" / ".gitkeep"
+    insights.unlink()
+    insights.parent.rmdir()
+    manifest_path = root / ".llm-wiki-workspace.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["managed_files"].pop("insights/.gitkeep")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    preview = CliRunner().invoke(app, ["workspace", "upgrade", str(root)])
+
+    assert preview.exit_code == 0, preview.output
+    assert not insights.exists()
+    assert "workspace: ready" in preview.output
+
+    result = CliRunner().invoke(app, ["workspace", "upgrade", str(root), "--apply"])
+
+    assert result.exit_code == 0, result.output
+    assert insights.exists()
+    assert "insights/.gitkeep" in json.loads(manifest_path.read_text())["managed_files"]
+
+
+def test_workspace_upgrade_workspace_only_skips_registered_wikis(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    wiki = root / "research"
+    CliRunner().invoke(app, ["init", str(wiki)])
+    manifest_path = root / ".llm-wiki-workspace.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["wikis"] = ["research"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    original = (wiki / "AGENTS.md").read_bytes()
+    (wiki / "AGENTS.md").write_text("custom", encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["workspace", "upgrade", str(root), "--workspace-only", "--apply"])
+
+    assert result.exit_code == 0, result.output
+    assert (wiki / "AGENTS.md").read_bytes() != original
+    assert "research:" not in result.output
 
 
 def test_workspace_rejects_unregistered_selection(tmp_path):

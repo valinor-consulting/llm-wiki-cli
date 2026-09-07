@@ -15,7 +15,7 @@ uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git llm-wiki i
 Pin to a released tag for reproducibility:
 
 ```bash
-uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.4.2 llm-wiki init my-wiki
+uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.4.4 llm-wiki init my-wiki
 ```
 
 Install it as a persistent tool on your PATH:
@@ -80,7 +80,7 @@ llm-wiki --version
 
 ```bash
 uv tool install --force \
-  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.4.2 \
+  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.4.4 \
   llm-wiki-cli
 llm-wiki --version
 ```
@@ -95,19 +95,29 @@ The upgrade is additive and conflict-safe. It copies a legacy customized `CLAUDE
 
 ## Mono-Repo Workspaces
 
-Use a workspace when one repository contains several independent LLM wikis. The repository root is a dispatcher, not a wiki: each registered top-level directory keeps its own `TOPIC.md`, `WIKI.md`, and content.
+Use a workspace when one repository contains several independent LLM wikis. The repository root is a dispatcher, not a wiki: each registered top-level directory keeps its own `TOPIC.md`, `WIKI.md`, and content. The root `insights/` directory is reserved for human-authored notes and cross-wiki synthesis.
 
 ```bash
 llm-wiki workspace init /path/to/wiki-workspace
 llm-wiki workspace import /path/to/existing-wiki research --workspace /path/to/wiki-workspace
 llm-wiki workspace status /path/to/wiki-workspace
-llm-wiki workspace upgrade /path/to/wiki-workspace
+llm-wiki workspace upgrade /path/to/wiki-workspace --workspace-only --apply
+llm-wiki workspace upgrade /path/to/wiki-workspace --wiki research --apply
 llm-wiki workspace upgrade /path/to/wiki-workspace --apply
 llm-wiki workspace migrate-okf /path/to/wiki-workspace --wiki research
 llm-wiki workspace migrate-okf /path/to/wiki-workspace --wiki research --apply
 ```
 
-Imports immediately migrate unchanged legacy integrations to the workspace layout. The upgrade command remains available for existing imported wikis and is read-only until `--apply` is supplied. In Claude Code or Codex, open the mono-repo root, name the wiki you want to work on, and let the root dispatcher load that wiki's local instructions.
+Imports immediately migrate unchanged legacy integrations to the workspace layout. `workspace upgrade` is preview-first and always includes root-managed workspace files (such as `AGENTS.md`, the shared skills, and `insights/.gitkeep`). Its scope is explicit:
+
+| Command | What it upgrades |
+| --- | --- |
+| `llm-wiki upgrade /path/to/wiki` | One standalone wiki; it applies immediately and does not operate on a workspace root. |
+| `llm-wiki workspace upgrade ROOT --workspace-only --apply` | Only the workspace root. Use this for a new root feature such as `insights/`. |
+| `llm-wiki workspace upgrade ROOT --wiki NAME --apply` | The workspace root plus the named registered wiki. Repeat `--wiki` to select several. |
+| `llm-wiki workspace upgrade ROOT --apply` | The workspace root plus every registered wiki. |
+
+All workspace upgrades preflight their complete scope before writing; a managed-file conflict prevents the whole requested upgrade. In Claude Code or Codex, open the mono-repo root, name the wiki you want to work on, and let the root dispatcher load that wiki's local instructions.
 
 `workspace migrate-okf` is a separate, preview-first content migration. It converts a registered wiki corpus to the OKF v0.2 profile only after every selected wiki passes preflight.
 

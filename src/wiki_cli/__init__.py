@@ -122,10 +122,13 @@ def workspace_status(
 def workspace_upgrade(
     directory: str = typer.Argument(".", help="Workspace root (default: current directory)."),
     wiki: list[str] = typer.Option(None, "--wiki", help="Registered wiki to select; repeatable."),
+    workspace_only: bool = typer.Option(False, "--workspace-only", help="Upgrade root-managed workspace files only."),
     apply: bool = typer.Option(False, "--apply", help="Apply a conflict-free upgrade plan."),
 ) -> None:
-    """Plan or apply upgrades for registered wikis."""
-    items = _workspace.upgrade(Path(directory), names=wiki or None, apply=apply)
+    """Plan or apply root workspace and registered-wiki upgrades."""
+    if workspace_only and wiki:
+        raise typer.BadParameter("Use either --workspace-only or --wiki, not both.")
+    items = _workspace.upgrade(Path(directory), names=[] if workspace_only else (wiki or None), apply=apply)
     for item in items:
         console.print(f"{item.name}: [bold]{item.state}[/bold]" + (f" ({item.detail})" if item.detail else ""))
     if any(item.state == "conflict" for item in items):

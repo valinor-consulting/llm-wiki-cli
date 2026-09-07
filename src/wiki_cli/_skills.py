@@ -104,6 +104,7 @@ def workspace_rendered_files() -> dict[str, tuple[bytes, bool]]:
     rendered: dict[str, tuple[bytes, bool]] = {
         "AGENTS.md": (_read_asset("workspace/AGENTS.md"), False),
         "CLAUDE.md": (_read_asset("workspace/CLAUDE.md"), False),
+        "insights/.gitkeep": (_read_asset("workspace/insights/.gitkeep"), False),
     }
 
     selector = _read_asset("workspace/select-wiki/SKILL.md")

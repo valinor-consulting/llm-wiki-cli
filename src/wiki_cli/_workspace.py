@@ -216,22 +216,84 @@ def selected_wikis(root: Path, names: list[str] | None = None) -> list[tuple[str
     root = root.expanduser().resolve()
     manifest = _read_manifest(root)
     registered = list(manifest["wikis"])
-    chosen = names or registered
+    chosen = registered if names is None else names
     unknown = sorted(set(chosen) - set(registered))
     if unknown:
         raise typer.BadParameter(f"Unregistered wiki: {', '.join(unknown)}")
     return [(relative, _validate_wiki_path(root, relative)) for relative in chosen]
 
 
+def _root_upgrade_plan(root: Path) -> tuple[dict[str, tuple[bytes, bool]], list[str]]:
+    """Return safe root-managed updates and conflicts without writing anything."""
+    manifest = _read_manifest(root)
+    managed = dict(manifest["managed_files"])
+    updates: dict[str, tuple[bytes, bool]] = {}
+    conflicts: list[str] = []
+    for relative, (desired, executable) in _root_files().items():
+        destination = root / relative
+        if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+            conflicts.append(relative)
+            continue
+        if relative == ".gitignore" and destination.is_file():
+            merged = _merge_gitignore(destination.read_bytes(), desired)
+            if merged != destination.read_bytes() or managed.get(relative) != _digest(merged):
+                updates[relative] = (merged, executable)
+            continue
+        if not destination.exists():
+            updates[relative] = (desired, executable)
+            continue
+        current = destination.read_bytes()
+        recorded = managed.get(relative)
+        if recorded is None and current != desired:
+            conflicts.append(relative)
+        elif recorded is not None and _digest(current) != recorded:
+            conflicts.append(relative)
+        elif current != desired or recorded != _digest(desired):
+            updates[relative] = (desired, executable)
+    return updates, conflicts
+
+
+def _apply_root_upgrade(root: Path, updates: dict[str, tuple[bytes, bool]]) -> None:
+    manifest = _read_manifest(root)
+    managed = dict(manifest["managed_files"])
+    for relative, (content, executable) in updates.items():
+        destination = root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(content)
+        if executable:
+            destination.chmod(destination.stat().st_mode | 0o111)
+    for relative, (content, _executable) in _root_files().items():
+        destination = root / relative
+        if destination.is_file() and not destination.is_symlink():
+            managed[relative] = _digest(destination.read_bytes())
+    manifest["managed_files"] = dict(sorted(managed.items()))
+    manifest["template_version"] = _upgrade.package_version()
+    _write_manifest(root, manifest)
+
+
 def upgrade(root: Path, *, names: list[str] | None, apply: bool) -> list[WikiStatus]:
+    root = root.expanduser().resolve()
+    root_updates, root_conflicts = _root_upgrade_plan(root)
     selected = selected_wikis(root, names)
-    statuses: list[WikiStatus] = []
+    statuses: list[WikiStatus] = [
+        WikiStatus(
+            "workspace",
+            "conflict" if root_conflicts else "ready",
+            ", ".join(root_conflicts) if root_conflicts else (
+                f"{len(root_updates)} root-managed file(s) will update" if root_updates else "already up to date"
+            ),
+        )
+    ]
     for name, target in selected:
         conflicts = _upgrade_conflicts(target)
         statuses.append(WikiStatus(name, "conflict" if conflicts else "ready", ", ".join(conflicts or _migration_notes(target))))
     if not apply or any(item.state != "ready" for item in statuses):
         return statuses
-    return [WikiStatus(name, "upgraded", _workspace_upgrade(target)) for name, target in selected]
+    _apply_root_upgrade(root, root_updates)
+    return [
+        WikiStatus("workspace", "upgraded", f"{len(root_updates)} root-managed file(s) updated"),
+        *[WikiStatus(name, "upgraded", _workspace_upgrade(target)) for name, target in selected],
+    ]
 
 
 def migrate_okf(root: Path, *, names: list[str] | None, apply: bool) -> list[WikiStatus]:
