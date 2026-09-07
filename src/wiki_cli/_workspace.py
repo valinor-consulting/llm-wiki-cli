@@ -48,7 +48,12 @@ def _digest(content: bytes) -> str:
 
 
 def _root_files() -> dict[str, tuple[bytes, bool]]:
-    return _skills.workspace_rendered_files()
+    files_to_write = _skills.workspace_rendered_files()
+    files_to_write[".gitignore"] = (
+        (files("wiki_cli") / "template" / ".gitignore").read_bytes(),
+        False,
+    )
+    return files_to_write
 
 
 def _workspace_upgrade_files() -> dict[str, tuple[bytes, bool]]:
@@ -119,12 +124,14 @@ def init(root: Path) -> None:
     desired = _root_files()
     for relative in desired:
         destination = root / relative
-        if destination.exists():
+        if destination.exists() and relative != ".gitignore":
             raise typer.BadParameter(f"Refusing to replace existing workspace file: {destination}")
     managed: dict[str, str] = {}
     for relative, (content, executable) in desired.items():
         destination = root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
+        if relative == ".gitignore" and destination.exists():
+            content = _merge_gitignore(destination.read_bytes(), content)
         destination.write_bytes(content)
         if executable:
             destination.chmod(destination.stat().st_mode | 0o111)
@@ -135,6 +142,17 @@ def init(root: Path) -> None:
         "managed_files": dict(sorted(managed.items())),
         "wikis": [],
     })
+
+
+def _merge_gitignore(existing: bytes, required: bytes) -> bytes:
+    """Append only missing bundled ignore lines, preserving a repository's rules."""
+    existing_text = existing.decode("utf-8")
+    required_text = required.decode("utf-8")
+    existing_lines = set(existing_text.splitlines())
+    missing = [line for line in required_text.splitlines() if line not in existing_lines]
+    if not missing:
+        return existing
+    return (existing_text.rstrip() + "\n" + "\n".join(missing) + "\n").encode()
 
 
 @dataclass

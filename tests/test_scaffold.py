@@ -7,6 +7,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 import typer
@@ -170,10 +171,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.4.1")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.4.2")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.4.1"
+    assert result.output.strip() == "0.4.2"
 
 
 def _legacy_wiki(path):
@@ -272,8 +273,21 @@ def test_workspace_init_creates_root_integrations_without_wiki(tmp_path):
     manifest = json.loads((root / ".llm-wiki-workspace.json").read_text())
     assert manifest["wikis"] == []
     assert (root / "AGENTS.md").exists()
+    assert (root / ".gitignore").read_bytes() == (Path(__file__).parents[1] / "src" / "wiki_cli" / "template" / ".gitignore").read_bytes()
     assert (root / ".agents" / "skills" / "select-wiki" / "SKILL.md").exists()
     assert not (root / "TOPIC.md").exists()
+
+
+def test_workspace_init_merges_existing_gitignore(tmp_path):
+    root = tmp_path / "workspace"
+    root.mkdir()
+    (root / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
+
+    _workspace.init(root)
+
+    text = (root / ".gitignore").read_text()
+    assert "node_modules/" in text
+    assert "**/.obsidian/workspace.json" in text
 
 
 def test_workspace_import_excludes_git_and_registers_wiki(tmp_path):
