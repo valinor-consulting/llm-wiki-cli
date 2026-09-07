@@ -170,10 +170,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.3.0")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.3.2")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.3.0"
+    assert result.output.strip() == "0.3.2"
 
 
 def _legacy_wiki(path):
@@ -289,6 +289,7 @@ def test_workspace_import_excludes_git_and_registers_wiki(tmp_path):
     assert result.exit_code == 0, result.output
     assert (root / "research" / "TOPIC.md").exists()
     assert not (root / "research" / ".git").exists()
+    assert not (root / "research" / ".codex" / "hooks.json").exists()
     assert _workspace.status(root)[0].state == "ready"
 
 
@@ -319,6 +320,36 @@ def test_workspace_rejects_unregistered_selection(tmp_path):
 
     assert result.exit_code != 0
     assert "Unregistered wiki" in result.output
+
+
+def test_workspace_upgrade_migrates_unmodified_schema_and_removes_duplicates(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    source = tmp_path / "legacy-wiki"
+    CliRunner().invoke(app, ["init", str(source)])
+    schema = source / "WIKI.md"
+    schema.write_bytes(_workspace._legacy_schema())
+    _workspace.import_wiki(root, source, "research")
+
+    target = root / "research"
+    assert _workspace.WORKSPACE_PROSE_REFERENCE in (target / "WIKI.md").read_text()
+    assert not (target / ".agents" / "skills" / "prose-voice" / "SKILL.md").exists()
+    assert not (target / ".codex" / "hooks.json").exists()
+    assert (target / ".agents" / "skills" / "define-topic" / "SKILL.md").exists()
+
+
+def test_workspace_upgrade_preserves_duplicates_for_custom_schema(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    source = tmp_path / "custom-wiki"
+    CliRunner().invoke(app, ["init", str(source)])
+    (source / "WIKI.md").write_text("# Custom schema\n", encoding="utf-8")
+    _workspace.import_wiki(root, source, "custom")
+
+    result = CliRunner().invoke(app, ["workspace", "upgrade", str(root), "--apply"])
+
+    assert result.exit_code == 0, result.output
+    assert (root / "custom" / ".agents" / "skills" / "prose-voice" / "SKILL.md").exists()
 
 
 def _run_codex_hook(tmp_path, patch):

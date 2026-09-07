@@ -75,7 +75,7 @@ Avoid the common tells of default LLM output:
 
 A person unfamiliar with LLMs should be able to read any wiki page and not notice it was written by one.
 
-Follow the `prose-voice` skill (`.claude/skills/prose-voice/SKILL.md` in Claude Code or `.agents/skills/prose-voice/SKILL.md` in Codex).
+Follow the active `prose-voice` skill for this wiki. In a workspace, select the wiki before applying the shared root skill.
 
 ---
 

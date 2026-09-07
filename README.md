@@ -15,7 +15,7 @@ uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git llm-wiki i
 Pin to a released tag for reproducibility:
 
 ```bash
-uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.3.0 llm-wiki init my-wiki
+uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.3.2 llm-wiki init my-wiki
 ```
 
 Install it as a persistent tool on your PATH:
@@ -80,7 +80,7 @@ llm-wiki --version
 
 ```bash
 uv tool install --force \
-  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.3.0 \
+  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.3.2 \
   llm-wiki-cli
 llm-wiki --version
 ```
@@ -105,7 +105,7 @@ llm-wiki workspace upgrade /path/to/wiki-workspace
 llm-wiki workspace upgrade /path/to/wiki-workspace --apply
 ```
 
-The first upgrade command is read-only. It checks every registered wiki before `--apply` makes any changes. In Claude Code or Codex, open the mono-repo root, name the wiki you want to work on, and let the root dispatcher load that wiki's local instructions.
+Imports immediately migrate unchanged legacy integrations to the workspace layout. The upgrade command remains available for existing imported wikis and is read-only until `--apply` is supplied. In Claude Code or Codex, open the mono-repo root, name the wiki you want to work on, and let the root dispatcher load that wiki's local instructions.
 
 ## Versioning
 

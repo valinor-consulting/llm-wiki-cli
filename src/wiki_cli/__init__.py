@@ -142,7 +142,7 @@ def workspace_import(
 ) -> None:
     """Copy a standalone wiki into this workspace, excluding its .git directory."""
     imported = _workspace.import_wiki(Path(directory), Path(source), name)
-    console.print(f"[green]✓[/green] Imported and registered [bold]{imported}[/bold]")
+    console.print(f"[green]✓[/green] Imported, migrated, and registered [bold]{imported}[/bold]")
 
 
 def main() -> None:
