@@ -51,8 +51,8 @@ def main():
         if offenders:
             sample = "\n  ".join(offenders[:3])
             block(
-                "BLOCKED: wiki corpus documents use standard Markdown links under "
-                "the OKF profile, not Obsidian [[wiki links]]. Offending line(s):\n  "
+                "BLOCKED: wiki corpus documents use relative standard Markdown links "
+                "under the OKF profile, not Obsidian [[wiki links]]. Offending line(s):\n  "
                 + sample
             )
     except Exception:

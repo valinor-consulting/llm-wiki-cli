@@ -11,6 +11,7 @@ import yaml
 
 WIKI_LINK = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
 MARKDOWN_LINK = re.compile(r"^\[([^\]]+)\]\(([^)]+)\)$")
+ROOT_MARKDOWN_LINK = re.compile(r"(\[[^\]]+\])\((/[^)]+)\)")
 FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
 
 
@@ -92,10 +93,12 @@ def build_plan(wiki_root: Path) -> MigrationPlan:
     def internal_link(target: str, label: str | None, owner: Path) -> str:
         if target in slugs:
             path = slugs[target]
-            return f"[{label or target}](/{path.relative_to(wiki_root).as_posix()})"
+            href = Path(os.path.relpath(path, owner.parent)).as_posix()
+            return f"[{label or target}]({href})"
         reserved = {"index": wiki_root / "index.md", "log": wiki_root / "log.md"}
         if target in reserved and reserved[target].is_file():
-            return f"[{label or target}](/{reserved[target].relative_to(wiki_root).as_posix()})"
+            href = Path(os.path.relpath(reserved[target], owner.parent)).as_posix()
+            return f"[{label or target}]({href})"
         if target == "TOPIC" and (wiki_root.parent / "TOPIC.md").is_file():
             href = Path(os.path.relpath(wiki_root.parent / "TOPIC.md", owner.parent)).as_posix()
             return f"[{label or target}]({href})"
@@ -113,7 +116,22 @@ def build_plan(wiki_root: Path) -> MigrationPlan:
         return f"[{label or target}](/{target}.md)"
 
     def replace_links(text: str, owner: Path) -> str:
-        return WIKI_LINK.sub(lambda match: internal_link(match.group(1), match.group(2), owner), text)
+        converted = WIKI_LINK.sub(lambda match: internal_link(match.group(1), match.group(2), owner), text)
+
+        def relative_root_link(match: re.Match[str]) -> str:
+            destination = match.group(2)
+            path_part, separator, fragment = destination.partition("#")
+            candidate = wiki_root / path_part.lstrip("/")
+            if not candidate.is_file() and path_part.startswith("/raw/"):
+                candidate = wiki_root.parent / path_part.lstrip("/")
+            if not candidate.is_file() and path_part == "/TOPIC.md":
+                candidate = wiki_root.parent / "TOPIC.md"
+            if not candidate.is_file():
+                return match.group(0)
+            href = Path(os.path.relpath(candidate, owner.parent)).as_posix()
+            return f"{match.group(1)}({href}{separator}{fragment})"
+
+        return ROOT_MARKDOWN_LINK.sub(relative_root_link, converted)
 
     changes: dict[Path, str] = {}
     for path in markdown:

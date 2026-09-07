@@ -170,10 +170,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.4.0")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.4.1")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.4.0"
+    assert result.output.strip() == "0.4.1"
 
 
 def _legacy_wiki(path):
@@ -415,11 +415,16 @@ Existing citation prose.
     assert "type: Concept" in converted
     assert "sources:" not in converted
     assert "[notes.pdf](../../raw/notes.pdf)" in converted
-    assert "[Reference](/sources/reference.md)" in converted
+    assert "[Reference](../sources/reference.md)" in converted
     assert "## Related Concepts" in converted
     assert "Existing citation prose." in converted
     assert 'okf_version: "0.2"' in (wiki / "wiki" / "index.md").read_text()
     assert _workspace.OKF_OVERRIDE_START in (wiki / "WIKI.md").read_text()
+
+    page.write_text(converted.replace("../sources/reference.md", "/sources/reference.md"), encoding="utf-8")
+    repaired = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--wiki", "research", "--apply"])
+    assert repaired.exit_code == 0, repaired.output
+    assert "[Reference](../sources/reference.md)" in page.read_text()
 
 
 def test_okf_migration_blocks_all_selected_wikis_on_unresolved_link(tmp_path):

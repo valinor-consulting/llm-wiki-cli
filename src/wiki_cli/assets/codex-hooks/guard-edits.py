@@ -120,8 +120,8 @@ def main() -> None:
             offenders = [str(line).strip() for line in change["added"] if OBSIDIAN_LINK.search(str(line))]
             if offenders:
                 block(
-                    "BLOCKED: OKF wiki documents use standard Markdown links, not "
-                    "Obsidian [[wiki links]]. Offending line(s):\n  " + "\n  ".join(offenders[:3])
+                    "BLOCKED: OKF wiki documents use relative standard Markdown links, "
+                    "not Obsidian [[wiki links]]. Offending line(s):\n  " + "\n  ".join(offenders[:3])
                 )
 
         for change in files:

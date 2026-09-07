@@ -38,7 +38,7 @@ OKF_OVERRIDE_END = "<!-- llm-wiki:okf-format:end -->"
 OKF_OVERRIDE = f"""{OKF_OVERRIDE_START}
 ## OKF Format Override
 
-For every document in `wiki/`, use parseable YAML frontmatter with a non-empty OKF `type`. Use standard Markdown links, not Obsidian `[[wiki links]]`. Record external web provenance in structured `sources:` entries and mirror it in a terminal `## Citations` section. Put internal concept links in a terminal `## Related Concepts` section. Do not put legacy link strings in frontmatter `sources` or `related` fields. This override takes precedence over earlier format instructions.
+For every document in `wiki/`, use parseable YAML frontmatter with a non-empty OKF `type`. Use relative standard Markdown links, not Obsidian `[[wiki links]]` or bundle-root paths. Record external web provenance in structured `sources:` entries and mirror it in a terminal `## Citations` section. Put internal concept links in a terminal `## Related Concepts` section. Do not put legacy link strings in frontmatter `sources` or `related` fields. This override takes precedence over earlier format instructions.
 {OKF_OVERRIDE_END}
 """
 

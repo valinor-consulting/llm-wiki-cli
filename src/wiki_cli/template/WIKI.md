@@ -51,7 +51,7 @@ Always update the `updated:` field whenever a page is edited.
 
 ## Link Conventions
 
-- **Internal links** (between wiki files): bundle-root Markdown paths — `[Display Text](/concepts/concept-page.md)`.
+- **Internal links** (between wiki files): relative Markdown paths — `[Display Text](../concepts/concept-page.md)`.
 - **External links** (web sources): standard markdown — `[text](url)`
 - Mirror every external `sources` entry in a terminal `## Citations` section.
 - Put internal cross-references accumulated for a page in a terminal `## Related Concepts` section.
