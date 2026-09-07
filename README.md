@@ -15,7 +15,7 @@ uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git llm-wiki i
 Pin to a released tag for reproducibility:
 
 ```bash
-uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.6.0 llm-wiki init my-wiki
+uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.7.0 llm-wiki init my-wiki
 ```
 
 Install it as a persistent tool on your PATH:
@@ -61,7 +61,7 @@ Optional commands, skills, and hooks for both agents are installed by default. P
 
 ## Getting started
 
-Open the generated directory as the workspace root. In Claude Code, run `/define-topic`. In Codex, use `/hooks` to review and trust the project hooks, then invoke `$define-topic`. The workflow interviews you and writes a structured `TOPIC.md`. From there, add sources and ask the agent to ingest them or answer questions.
+Open the generated directory as the workspace root. In Claude Code or the Codex VS Code extension, run `/define-topic`. In Codex, use `/hooks` to review and trust the project hooks when prompted. The workflow interviews you and writes a structured `TOPIC.md`. From there, add sources and ask the agent to ingest them or answer questions.
 
 Codex hooks are useful guardrails, but their documented tool coverage is not a complete security boundary.
 
@@ -80,7 +80,7 @@ llm-wiki --version
 
 ```bash
 uv tool install --force \
-  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.6.0 \
+  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.7.0 \
   llm-wiki-cli
 llm-wiki --version
 ```
@@ -112,6 +112,7 @@ Every registered wiki lives in `wikis/<name>/` and retains its own `TOPIC.md`, `
 
 ```bash
 llm-wiki workspace init /path/to/wiki-workspace                    # create a workspace root
+llm-wiki workspace create example-wiki --workspace /path/to/wiki-workspace # create and register a fresh wiki
 llm-wiki workspace import /path/to/example-wiki example-wiki \
   --workspace /path/to/wiki-workspace                              # copy and register it as wikis/example-wiki/
 llm-wiki workspace status /path/to/wiki-workspace                  # inspect registered wiki readiness
@@ -155,7 +156,7 @@ llm-wiki workspace research status /path/to/wiki-workspace         # list projec
 
 `workspace research init NAME` creates `research/<slug>/BRIEF.md`, `REPORT.md`, and `SOURCES.md`. The brief defines the question and constraints; the report is the evolving answer with a terminal `## References` section; the source ledger retains working source and verification notes.
 
-From the workspace root, use `/research-project` in Claude Code or `$research-project` in Codex to create or resume a project. The workflow researches and refines only the chosen project directory. It does not modify a wiki or `insights/` unless you explicitly request promotion of the work.
+From the workspace root, use `/research-project` in Claude Code or the Codex VS Code extension to create or resume a project. The workflow researches and refines only the chosen project directory. It does not modify a wiki or `insights/` unless you explicitly request promotion of the work.
 
 ### Current-directory defaults
 

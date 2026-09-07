@@ -171,10 +171,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.6.0")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.7.0")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.6.0"
+    assert result.output.strip() == "0.7.0"
 
 
 def _legacy_wiki(path):
@@ -273,6 +273,7 @@ def test_workspace_init_creates_root_integrations_without_wiki(tmp_path):
     manifest = json.loads((root / ".llm-wiki-workspace.json").read_text())
     assert manifest["wikis"] == []
     assert (root / "AGENTS.md").exists()
+    assert (root / "README.md").exists()
     assert (root / ".gitignore").read_bytes() == (Path(__file__).parents[1] / "src" / "wiki_cli" / "template" / ".gitignore").read_bytes()
     assert (root / "insights" / ".gitkeep").exists()
     assert (root / "research" / ".gitkeep").exists()
@@ -281,6 +282,20 @@ def test_workspace_init_creates_root_integrations_without_wiki(tmp_path):
     assert (root / ".agents" / "skills" / "research-project" / "SKILL.md").exists()
     assert (root / ".claude" / "commands" / "research-project.md").exists()
     assert not (root / "TOPIC.md").exists()
+
+
+def test_workspace_create_scaffolds_and_registers_a_wiki(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+
+    result = CliRunner().invoke(app, ["workspace", "create", "example-wiki", "--workspace", str(root)])
+
+    target = root / "wikis" / "example-wiki"
+    assert result.exit_code == 0, result.output
+    assert (target / "TOPIC.md").is_file()
+    assert (target / "WIKI.md").is_file()
+    assert not (target / ".agents" / "skills" / "prose-voice" / "SKILL.md").exists()
+    assert json.loads((root / ".llm-wiki-workspace.json").read_text())["wikis"] == ["wikis/example-wiki"]
 
 
 def test_workspace_init_merges_existing_gitignore(tmp_path):

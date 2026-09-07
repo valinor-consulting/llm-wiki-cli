@@ -12,7 +12,7 @@ from pathlib import Path
 
 import typer
 
-from . import _okf, _skills, _upgrade
+from . import _okf, _scaffold, _skills, _upgrade
 
 MANIFEST_NAME = ".llm-wiki-workspace.json"
 SCHEMA_VERSION = 1
@@ -522,3 +522,27 @@ def import_wiki(root: Path, source: Path, name: str | None = None) -> str:
     manifest["wikis"].sort()
     _write_manifest(root, manifest)
     return destination_name
+
+
+def create_wiki(root: Path, name: str) -> str:
+    """Create and register a fresh wiki in the workspace's canonical location."""
+    root = root.expanduser().resolve()
+    manifest = _read_manifest(root)
+    if Path(name).name != name or name in {"", ".", ".."}:
+        raise typer.BadParameter("NAME must be a simple wiki directory name.")
+    if name in RESERVED_WORKSPACE_DIRECTORIES:
+        raise typer.BadParameter(f"NAME is reserved by the workspace: {name}")
+    relative = _canonical_wiki_path(name)
+    destination = root / relative
+    if destination.exists() or destination.is_symlink():
+        raise typer.BadParameter(f"Destination already exists: {destination}")
+    if relative in manifest["wikis"] or name in manifest["wikis"]:
+        raise typer.BadParameter(f"Wiki already registered: {name}")
+    _scaffold.copy_template(destination)
+    _skills.install(destination)
+    _upgrade.record_fresh_install(destination, include_integrations=True)
+    _workspace_upgrade(destination)
+    manifest["wikis"].append(relative)
+    manifest["wikis"].sort()
+    _write_manifest(root, manifest)
+    return relative

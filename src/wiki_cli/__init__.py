@@ -64,7 +64,7 @@ def init(
     console.print("Next steps:")
     console.print(f"  1. cd {Path(directory)}")
     console.print("  2. Claude Code: run [bold]/define-topic[/bold]")
-    console.print("     Codex: review [bold]/hooks[/bold], then run [bold]$define-topic[/bold]")
+    console.print("     Codex VS Code: review [bold]/hooks[/bold] when prompted, then run [bold]/define-topic[/bold]")
     console.print(
         "  3. (optional) run [bold]git init[/bold] yourself if you want version control"
     )
@@ -164,6 +164,16 @@ def workspace_import(
     """Copy a standalone wiki into this workspace, excluding its .git directory."""
     imported = _workspace.import_wiki(Path(directory), Path(source), name)
     console.print(f"[green]✓[/green] Imported, migrated, and registered [bold]{imported}[/bold]")
+
+
+@workspace_app.command("create")
+def workspace_create(
+    name: str = typer.Argument(..., help="Directory name for the new registered wiki."),
+    directory: str = typer.Option(".", "--workspace", help="Workspace root (default: current directory)."),
+) -> None:
+    """Create and register a new wiki under the workspace's wikis directory."""
+    created = _workspace.create_wiki(Path(directory), name)
+    console.print(f"[green]✓[/green] Created and registered [bold]{created}[/bold]")
 
 
 @research_app.command("init")

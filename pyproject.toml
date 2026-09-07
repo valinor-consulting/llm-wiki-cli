@@ -1,6 +1,6 @@
 [project]
 name = "llm-wiki-cli"
-version = "0.6.0"
+version = "0.7.0"
 description = "Scaffold an LLM-maintained knowledge wiki for Claude Code and OpenAI Codex."
 requires-python = ">=3.11"
 dependencies = ["typer>=0.12", "rich>=13.0", "PyYAML>=6.0"]

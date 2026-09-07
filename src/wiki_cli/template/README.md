@@ -5,7 +5,7 @@ An LLM-maintained knowledge wiki built on the [LLM Wiki pattern](llm-wiki.md). A
 ## Getting started
 
 1. Open this directory as the workspace root in Claude Code or Codex.
-2. In Claude Code, run `/define-topic`. In Codex, review and trust the project hooks with `/hooks`, then invoke `$define-topic`. Answer the interview to write a complete `TOPIC.md`.
+2. In Claude Code or the Codex VS Code extension, run `/define-topic`. In Codex, review and trust the project hooks with `/hooks` when prompted. Answer the interview to write a complete `TOPIC.md`.
 3. Add source material to `raw/` (immutable source docs the agent reads but never edits) and ask the agent to ingest it.
 4. Ask questions. Each valuable answer is filed back into the wiki as a new page.
 
