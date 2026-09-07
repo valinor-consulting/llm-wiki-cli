@@ -105,11 +105,20 @@ def workspace_rendered_files() -> dict[str, tuple[bytes, bool]]:
         "AGENTS.md": (_read_asset("workspace/AGENTS.md"), False),
         "CLAUDE.md": (_read_asset("workspace/CLAUDE.md"), False),
         "insights/.gitkeep": (_read_asset("workspace/insights/.gitkeep"), False),
+        "research/.gitkeep": (_read_asset("workspace/research/.gitkeep"), False),
+        "wikis/.gitkeep": (_read_asset("workspace/wikis/.gitkeep"), False),
     }
 
     selector = _read_asset("workspace/select-wiki/SKILL.md")
     rendered[".agents/skills/select-wiki/SKILL.md"] = (selector, False)
     rendered[".claude/skills/select-wiki/SKILL.md"] = (selector, False)
+
+    research = _read_asset("workspace/research-project/SKILL.md")
+    rendered[".agents/skills/research-project/SKILL.md"] = (research, False)
+    rendered[".claude/commands/research-project.md"] = (
+        _read_asset("workspace/research-project.md"),
+        False,
+    )
 
     prose = _read_asset("skills/prose-voice/SKILL.md").decode()
     prose = prose.replace(

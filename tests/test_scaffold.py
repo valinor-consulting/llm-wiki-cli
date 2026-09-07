@@ -171,10 +171,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.4.4")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.6.0")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.4.4"
+    assert result.output.strip() == "0.6.0"
 
 
 def _legacy_wiki(path):
@@ -275,7 +275,11 @@ def test_workspace_init_creates_root_integrations_without_wiki(tmp_path):
     assert (root / "AGENTS.md").exists()
     assert (root / ".gitignore").read_bytes() == (Path(__file__).parents[1] / "src" / "wiki_cli" / "template" / ".gitignore").read_bytes()
     assert (root / "insights" / ".gitkeep").exists()
+    assert (root / "research" / ".gitkeep").exists()
+    assert (root / "wikis" / ".gitkeep").exists()
     assert (root / ".agents" / "skills" / "select-wiki" / "SKILL.md").exists()
+    assert (root / ".agents" / "skills" / "research-project" / "SKILL.md").exists()
+    assert (root / ".claude" / "commands" / "research-project.md").exists()
     assert not (root / "TOPIC.md").exists()
 
 
@@ -291,6 +295,59 @@ def test_workspace_init_merges_existing_gitignore(tmp_path):
     assert "**/.obsidian/workspace.json" in text
 
 
+def test_workspace_research_init_scaffolds_slugged_project_and_status(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+
+    result = CliRunner().invoke(app, [
+        "workspace", "research", "init", "Compare Local-First Note Apps!", "--workspace", str(root),
+    ])
+
+    project = root / "research" / "compare-local-first-note-apps"
+    assert result.exit_code == 0, result.output
+    assert (project / "BRIEF.md").is_file()
+    assert (project / "REPORT.md").is_file()
+    assert (project / "SOURCES.md").is_file()
+    assert "## References" in (project / "REPORT.md").read_text()
+    assert _workspace.research_status(root) == [
+        _workspace.ResearchStatus("compare-local-first-note-apps", "ready")
+    ]
+
+
+def test_workspace_research_rejects_collisions_and_reports_incomplete_projects(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    _workspace.init_research_project(root, "A Question")
+
+    duplicate = CliRunner().invoke(app, ["workspace", "research", "init", "a question", "--workspace", str(root)])
+    (root / "research" / "a-question" / "SOURCES.md").unlink()
+    status = CliRunner().invoke(app, ["workspace", "research", "status", str(root)])
+
+    assert duplicate.exit_code != 0
+    assert "already exists" in duplicate.output
+    assert status.exit_code == 0, status.output
+    assert "a-question: incomplete (missing SOURCES.md)" in status.output
+
+
+def test_workspace_research_requires_valid_workspace(tmp_path):
+    result = CliRunner().invoke(app, ["workspace", "research", "init", "Question", "--workspace", str(tmp_path)])
+
+    assert result.exit_code != 0
+    assert "No valid workspace manifest" in result.output
+
+
+def test_workspace_import_rejects_research_directory_name(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    source = tmp_path / "source-wiki"
+    CliRunner().invoke(app, ["init", str(source)])
+
+    result = CliRunner().invoke(app, ["workspace", "import", str(source), "research", "--workspace", str(root)])
+
+    assert result.exit_code != 0
+    assert "reserved" in result.output
+
+
 def test_workspace_import_excludes_git_and_registers_wiki(tmp_path):
     root = tmp_path / "workspace"
     _workspace.init(root)
@@ -299,13 +356,60 @@ def test_workspace_import_excludes_git_and_registers_wiki(tmp_path):
     (source / ".git").mkdir()
     (source / ".git" / "config").write_text("private", encoding="utf-8")
 
-    result = CliRunner().invoke(app, ["workspace", "import", str(source), "research", "--workspace", str(root)])
+    result = CliRunner().invoke(app, ["workspace", "import", str(source), "knowledge", "--workspace", str(root)])
 
     assert result.exit_code == 0, result.output
-    assert (root / "research" / "TOPIC.md").exists()
-    assert not (root / "research" / ".git").exists()
-    assert not (root / "research" / ".codex" / "hooks.json").exists()
+    assert (root / "wikis" / "knowledge" / "TOPIC.md").exists()
+    assert not (root / "wikis" / "knowledge" / ".git").exists()
+    assert not (root / "wikis" / "knowledge" / ".codex" / "hooks.json").exists()
+    assert json.loads((root / ".llm-wiki-workspace.json").read_text())["wikis"] == ["wikis/knowledge"]
     assert _workspace.status(root)[0].state == "ready"
+
+
+def test_workspace_upgrade_moves_legacy_root_wikis_into_wikis_directory(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    legacy = root / "knowledge"
+    CliRunner().invoke(app, ["init", str(legacy)])
+    manifest_path = root / ".llm-wiki-workspace.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["wikis"] = ["knowledge"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    preview = CliRunner().invoke(app, ["workspace", "upgrade", str(root), "--wiki", "knowledge"])
+
+    assert preview.exit_code == 0, preview.output
+    assert legacy.exists()
+    assert "will move into" in preview.output
+    assert "wikis/)" in preview.output
+
+    result = CliRunner().invoke(app, ["workspace", "upgrade", str(root), "--wiki", "knowledge", "--apply"])
+
+    destination = root / "wikis" / "knowledge"
+    assert result.exit_code == 0, result.output
+    assert not legacy.exists()
+    assert (destination / "TOPIC.md").exists()
+    assert json.loads(manifest_path.read_text())["wikis"] == ["wikis/knowledge"]
+
+
+def test_workspace_upgrade_does_not_move_any_wiki_when_layout_destination_conflicts(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    legacy = root / "knowledge"
+    destination = root / "wikis" / "knowledge"
+    CliRunner().invoke(app, ["init", str(legacy)])
+    CliRunner().invoke(app, ["init", str(destination)])
+    manifest_path = root / ".llm-wiki-workspace.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["wikis"] = ["knowledge"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["workspace", "upgrade", str(root), "--apply"])
+
+    assert result.exit_code == 1
+    assert legacy.exists()
+    assert destination.exists()
+    assert json.loads(manifest_path.read_text())["wikis"] == ["knowledge"]
 
 
 def test_workspace_upgrade_is_read_only_until_apply_and_preflights_all(tmp_path):
@@ -351,14 +455,32 @@ def test_workspace_upgrade_adds_insights_to_existing_workspace(tmp_path):
     assert "insights/.gitkeep" in json.loads(manifest_path.read_text())["managed_files"]
 
 
+def test_workspace_upgrade_adds_research_directory_to_existing_workspace(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    research = root / "research" / ".gitkeep"
+    research.unlink()
+    research.parent.rmdir()
+    manifest_path = root / ".llm-wiki-workspace.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["managed_files"].pop("research/.gitkeep")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["workspace", "upgrade", str(root), "--workspace-only", "--apply"])
+
+    assert result.exit_code == 0, result.output
+    assert research.exists()
+    assert "research/.gitkeep" in json.loads(manifest_path.read_text())["managed_files"]
+
+
 def test_workspace_upgrade_workspace_only_skips_registered_wikis(tmp_path):
     root = tmp_path / "workspace"
     _workspace.init(root)
-    wiki = root / "research"
+    wiki = root / "knowledge"
     CliRunner().invoke(app, ["init", str(wiki)])
     manifest_path = root / ".llm-wiki-workspace.json"
     manifest = json.loads(manifest_path.read_text())
-    manifest["wikis"] = ["research"]
+    manifest["wikis"] = ["knowledge"]
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     original = (wiki / "AGENTS.md").read_bytes()
     (wiki / "AGENTS.md").write_text("custom", encoding="utf-8")
@@ -387,9 +509,9 @@ def test_workspace_upgrade_migrates_unmodified_schema_and_removes_duplicates(tmp
     CliRunner().invoke(app, ["init", str(source)])
     schema = source / "WIKI.md"
     schema.write_bytes(_workspace._legacy_schema())
-    _workspace.import_wiki(root, source, "research")
+    _workspace.import_wiki(root, source, "knowledge")
 
-    target = root / "research"
+    target = root / "wikis" / "knowledge"
     assert _workspace.WORKSPACE_PROSE_REFERENCE in (target / "WIKI.md").read_text()
     assert not (target / ".agents" / "skills" / "prose-voice" / "SKILL.md").exists()
     assert not (target / ".codex" / "hooks.json").exists()
@@ -405,7 +527,7 @@ def test_workspace_upgrade_recognizes_claude_only_legacy_schema(tmp_path):
 
     _workspace.import_wiki(root, source, "claude-only")
 
-    target = root / "claude-only"
+    target = root / "wikis" / "claude-only"
     assert _workspace.WORKSPACE_PROSE_REFERENCE in (target / "WIKI.md").read_text()
     assert not (target / ".claude" / "skills" / "prose-voice" / "SKILL.md").exists()
 
@@ -421,13 +543,13 @@ def test_workspace_upgrade_preserves_duplicates_for_custom_schema(tmp_path):
     result = CliRunner().invoke(app, ["workspace", "upgrade", str(root), "--apply"])
 
     assert result.exit_code == 0, result.output
-    assert (root / "custom" / ".agents" / "skills" / "prose-voice" / "SKILL.md").exists()
+    assert (root / "wikis" / "custom" / ".agents" / "skills" / "prose-voice" / "SKILL.md").exists()
 
 
 def test_okf_migration_previews_then_converts_links_sources_and_sections(tmp_path):
     root = tmp_path / "workspace"
     _workspace.init(root)
-    wiki = root / "research"
+    wiki = root / "knowledge"
     CliRunner().invoke(app, ["init", str(wiki)])
     concepts = wiki / "wiki" / "concepts"
     sources = wiki / "wiki" / "sources"
@@ -460,13 +582,13 @@ Existing citation prose.
 """
     page.write_text(original, encoding="utf-8")
     manifest = json.loads((root / ".llm-wiki-workspace.json").read_text())
-    manifest["wikis"] = ["research"]
+    manifest["wikis"] = ["knowledge"]
     (root / ".llm-wiki-workspace.json").write_text(json.dumps(manifest), encoding="utf-8")
 
-    preview = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--wiki", "research"])
+    preview = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--wiki", "knowledge"])
     assert preview.exit_code == 0, preview.output
     assert page.read_text() == original
-    applied = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--wiki", "research", "--apply"])
+    applied = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--wiki", "knowledge", "--apply"])
 
     converted = page.read_text()
     assert applied.exit_code == 0, applied.output
@@ -480,7 +602,7 @@ Existing citation prose.
     assert _workspace.OKF_OVERRIDE_START in (wiki / "WIKI.md").read_text()
 
     page.write_text(converted.replace("../sources/reference.md", "/sources/reference.md"), encoding="utf-8")
-    repaired = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--wiki", "research", "--apply"])
+    repaired = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--wiki", "knowledge", "--apply"])
     assert repaired.exit_code == 0, repaired.output
     assert "[Reference](../sources/reference.md)" in page.read_text()
 

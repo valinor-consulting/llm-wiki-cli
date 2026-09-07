@@ -15,6 +15,8 @@ app = typer.Typer(
 )
 workspace_app = typer.Typer(help="Manage a mono-repo containing registered LLM wikis.")
 app.add_typer(workspace_app, name="workspace")
+research_app = typer.Typer(help="Manage lightweight research projects in a wiki workspace.")
+workspace_app.add_typer(research_app, name="research")
 console = Console()
 
 
@@ -162,6 +164,28 @@ def workspace_import(
     """Copy a standalone wiki into this workspace, excluding its .git directory."""
     imported = _workspace.import_wiki(Path(directory), Path(source), name)
     console.print(f"[green]✓[/green] Imported, migrated, and registered [bold]{imported}[/bold]")
+
+
+@research_app.command("init")
+def research_init(
+    name: str = typer.Argument(..., help="Human-readable name for the research project."),
+    directory: str = typer.Option(".", "--workspace", help="Workspace root (default: current directory)."),
+) -> None:
+    """Create a lightweight research project at the workspace root."""
+    slug = _workspace.init_research_project(Path(directory), name)
+    console.print(f"[green]✓[/green] Created research project [bold]{slug}[/bold]")
+
+
+@research_app.command("status")
+def research_project_status(
+    directory: str = typer.Argument(".", help="Workspace root (default: current directory)."),
+) -> None:
+    """List workspace research projects without making changes."""
+    items = _workspace.research_status(Path(directory))
+    if not items:
+        console.print("No research projects.")
+    for item in items:
+        console.print(f"{item.name}: [bold]{item.state}[/bold]" + (f" ({item.detail})" if item.detail else ""))
 
 
 def main() -> None:

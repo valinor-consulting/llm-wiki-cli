@@ -22,7 +22,7 @@ wheels = [
 
 [[package]]
 name = "llm-wiki-cli"
-version = "0.4.4"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "pyyaml" },

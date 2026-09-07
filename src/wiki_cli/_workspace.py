@@ -16,6 +16,10 @@ from . import _okf, _skills, _upgrade
 
 MANIFEST_NAME = ".llm-wiki-workspace.json"
 SCHEMA_VERSION = 1
+RESEARCH_DIRECTORY = "research"
+RESEARCH_FILES = ("BRIEF.md", "REPORT.md", "SOURCES.md")
+WIKIS_DIRECTORY = "wikis"
+RESERVED_WORKSPACE_DIRECTORIES = {"insights", RESEARCH_DIRECTORY, WIKIS_DIRECTORY}
 LEGACY_PROSE_REFERENCES = (
     "Follow the `prose-voice` skill (`.claude/skills/prose-voice/SKILL.md` in Claude Code or `.agents/skills/prose-voice/SKILL.md` in Codex).",
     "Follow the `prose-voice` skill (`.claude/skills/prose-voice/SKILL.md`).",
@@ -109,11 +113,27 @@ def _root_path(root: Path, relative: str) -> Path:
 
 
 def _validate_wiki_path(root: Path, relative: str) -> Path:
+    if relative in RESERVED_WORKSPACE_DIRECTORIES:
+        raise typer.BadParameter(f"Workspace wiki path is reserved: {relative}")
     path = _root_path(root, relative)
-    if path.parent != root:
-        raise typer.BadParameter(f"Workspace wiki must be a top-level directory: {relative}")
+    parts = Path(relative).parts
+    is_legacy = len(parts) == 1
+    is_canonical = len(parts) == 2 and parts[0] == WIKIS_DIRECTORY
+    if not (is_legacy or is_canonical):
+        raise typer.BadParameter(f"Workspace wiki must be a direct child of {WIKIS_DIRECTORY}/: {relative}")
+    expected_parent = root if is_legacy else root / WIKIS_DIRECTORY
+    if path.parent != expected_parent:
+        raise typer.BadParameter(f"Unsafe workspace wiki path: {relative}")
     _upgrade._validate_wiki(path)
     return path
+
+
+def _canonical_wiki_path(name: str) -> str:
+    return f"{WIKIS_DIRECTORY}/{name}"
+
+
+def _is_legacy_wiki_path(relative: str) -> bool:
+    return len(Path(relative).parts) == 1 and relative not in RESERVED_WORKSPACE_DIRECTORIES
 
 
 def init(root: Path) -> None:
@@ -162,6 +182,13 @@ class WikiStatus:
     detail: str = ""
 
 
+@dataclass
+class ResearchStatus:
+    name: str
+    state: str
+    detail: str = ""
+
+
 def status(root: Path) -> list[WikiStatus]:
     root = root.expanduser().resolve()
     manifest = _read_manifest(root)
@@ -170,10 +197,68 @@ def status(root: Path) -> list[WikiStatus]:
         try:
             target = _validate_wiki_path(root, relative)
             conflicts = _upgrade_conflicts(target)
-            detail = ", ".join(conflicts or _migration_notes(target))
+            notes = conflicts or _migration_notes(target)
+            if _is_legacy_wiki_path(relative):
+                notes = [*notes, f"will move to {_canonical_wiki_path(relative)}"]
+            detail = ", ".join(notes)
             result.append(WikiStatus(relative, "conflict" if conflicts else "ready", detail))
         except typer.BadParameter as exc:
             result.append(WikiStatus(relative, "invalid", str(exc)))
+    return result
+
+
+def _research_slug(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    if not slug:
+        raise typer.BadParameter("NAME must contain at least one letter or number.")
+    return slug
+
+
+def _research_path(root: Path, slug: str) -> Path:
+    return _root_path(root, f"{RESEARCH_DIRECTORY}/{slug}")
+
+
+def _research_templates(name: str) -> dict[str, str]:
+    return {
+        "BRIEF.md": f"""# {name}\n\n## Research question\n\n<!-- What do you want to understand? -->\n\n## Context and constraints\n\n<!-- Audience, scope, constraints, and relevant prior knowledge. -->\n\n## Definition of done\n\n<!-- What would let you confidently conclude this project? -->\n""",
+        "REPORT.md": f"""# {name}\n\n## Current answer\n\n<!-- Refine this answer as the research develops. -->\n\n## Findings\n\n<!-- Evidence-backed findings in clear language. -->\n\n## Open questions\n\n<!-- Important uncertainty or next questions. -->\n\n## References\n\n<!-- Use standard Markdown links for cited sources. -->\n""",
+        "SOURCES.md": f"""# {name} Source Ledger\n\n<!-- Record useful sources, their relevance, and any notes for later verification. -->\n""",
+    }
+
+
+def init_research_project(root: Path, name: str) -> str:
+    """Create a lightweight research project in a validated workspace."""
+    root = root.expanduser().resolve()
+    _read_manifest(root)
+    slug = _research_slug(name)
+    destination = _research_path(root, slug)
+    if destination.exists() or destination.is_symlink():
+        raise typer.BadParameter(f"Research project already exists: {destination}")
+    destination.mkdir(parents=True)
+    for relative, content in _research_templates(name).items():
+        (destination / relative).write_text(content, encoding="utf-8")
+    return slug
+
+
+def research_status(root: Path) -> list[ResearchStatus]:
+    """List direct-child research projects and their required-file status."""
+    root = root.expanduser().resolve()
+    _read_manifest(root)
+    directory = _root_path(root, RESEARCH_DIRECTORY)
+    if not directory.exists():
+        return []
+    if directory.is_symlink() or not directory.is_dir():
+        raise typer.BadParameter(f"Invalid research directory: {directory}")
+    result: list[ResearchStatus] = []
+    for project in sorted(directory.iterdir(), key=lambda item: item.name):
+        if not project.is_dir() or project.is_symlink():
+            continue
+        missing = [name for name in RESEARCH_FILES if not (project / name).is_file()]
+        result.append(ResearchStatus(
+            project.name,
+            "ready" if not missing else "incomplete",
+            "" if not missing else f"missing {', '.join(missing)}",
+        ))
     return result
 
 
@@ -216,11 +301,48 @@ def selected_wikis(root: Path, names: list[str] | None = None) -> list[tuple[str
     root = root.expanduser().resolve()
     manifest = _read_manifest(root)
     registered = list(manifest["wikis"])
-    chosen = registered if names is None else names
+    aliases = {Path(relative).name: relative for relative in registered}
+    requested = registered if names is None else names
+    chosen = [aliases.get(name, name) for name in requested]
     unknown = sorted(set(chosen) - set(registered))
     if unknown:
         raise typer.BadParameter(f"Unregistered wiki: {', '.join(unknown)}")
     return [(relative, _validate_wiki_path(root, relative)) for relative in chosen]
+
+
+def _layout_moves(root: Path, selected: list[tuple[str, Path]]) -> tuple[list[tuple[str, Path, Path]], list[str]]:
+    """Preflight legacy root-wiki moves without changing the workspace."""
+    moves: list[tuple[str, Path, Path]] = []
+    conflicts: list[str] = []
+    wiki_directory = root / WIKIS_DIRECTORY
+    if wiki_directory.is_symlink() or (wiki_directory.exists() and not wiki_directory.is_dir()):
+        return moves, [WIKIS_DIRECTORY]
+    for relative, source in selected:
+        if not _is_legacy_wiki_path(relative):
+            continue
+        destination = wiki_directory / relative
+        if destination.exists() or destination.is_symlink():
+            conflicts.append(f"{relative} -> {_canonical_wiki_path(relative)}")
+        else:
+            moves.append((relative, source, destination))
+    return moves, conflicts
+
+
+def _apply_layout_moves(root: Path, moves: list[tuple[str, Path, Path]]) -> dict[str, Path]:
+    """Move preflighted legacy wikis and register their canonical paths."""
+    relocated: dict[str, Path] = {}
+    for relative, source, destination in moves:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+        relocated[relative] = destination
+    if relocated:
+        manifest = _read_manifest(root)
+        manifest["wikis"] = sorted(
+            _canonical_wiki_path(relative) if relative in relocated else relative
+            for relative in manifest["wikis"]
+        )
+        _write_manifest(root, manifest)
+    return relocated
 
 
 def _root_upgrade_plan(root: Path) -> tuple[dict[str, tuple[bytes, bool]], list[str]]:
@@ -275,12 +397,15 @@ def upgrade(root: Path, *, names: list[str] | None, apply: bool) -> list[WikiSta
     root = root.expanduser().resolve()
     root_updates, root_conflicts = _root_upgrade_plan(root)
     selected = selected_wikis(root, names)
+    moves, move_conflicts = _layout_moves(root, selected)
     statuses: list[WikiStatus] = [
         WikiStatus(
             "workspace",
-            "conflict" if root_conflicts else "ready",
-            ", ".join(root_conflicts) if root_conflicts else (
-                f"{len(root_updates)} root-managed file(s) will update" if root_updates else "already up to date"
+            "conflict" if root_conflicts or move_conflicts else "ready",
+            ", ".join(root_conflicts + move_conflicts) if root_conflicts or move_conflicts else (
+                f"{len(root_updates)} root-managed file(s) will update"
+                + (f"; {len(moves)} wiki(s) will move into {WIKIS_DIRECTORY}/" if moves else "")
+                if root_updates or moves else "already up to date"
             ),
         )
     ]
@@ -290,9 +415,10 @@ def upgrade(root: Path, *, names: list[str] | None, apply: bool) -> list[WikiSta
     if not apply or any(item.state != "ready" for item in statuses):
         return statuses
     _apply_root_upgrade(root, root_updates)
+    relocated = _apply_layout_moves(root, moves)
     return [
-        WikiStatus("workspace", "upgraded", f"{len(root_updates)} root-managed file(s) updated"),
-        *[WikiStatus(name, "upgraded", _workspace_upgrade(target)) for name, target in selected],
+        WikiStatus("workspace", "upgraded", f"{len(root_updates)} root-managed file(s) updated; {len(moves)} wiki(s) moved into {WIKIS_DIRECTORY}/"),
+        *[WikiStatus(name, "upgraded", _workspace_upgrade(relocated.get(name, target))) for name, target in selected],
     ]
 
 
@@ -382,10 +508,13 @@ def import_wiki(root: Path, source: Path, name: str | None = None) -> str:
     destination_name = name or source.name
     if Path(destination_name).name != destination_name or destination_name in {"", ".", ".."}:
         raise typer.BadParameter("NAME must be a simple top-level directory name.")
+    if destination_name in RESERVED_WORKSPACE_DIRECTORIES:
+        raise typer.BadParameter(f"NAME is reserved by the workspace: {destination_name}")
+    destination_name = _canonical_wiki_path(destination_name)
     destination = root / destination_name
     if destination.exists():
         raise typer.BadParameter(f"Destination already exists: {destination}")
-    if destination_name in manifest["wikis"]:
+    if destination_name in manifest["wikis"] or Path(destination_name).name in manifest["wikis"]:
         raise typer.BadParameter(f"Wiki already registered: {destination_name}")
     shutil.copytree(source, destination, ignore=shutil.ignore_patterns(".git"))
     _workspace_upgrade(destination)
