@@ -170,10 +170,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.3.2")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.3.3")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.3.2"
+    assert result.output.strip() == "0.3.3"
 
 
 def _legacy_wiki(path):
@@ -336,6 +336,20 @@ def test_workspace_upgrade_migrates_unmodified_schema_and_removes_duplicates(tmp
     assert not (target / ".agents" / "skills" / "prose-voice" / "SKILL.md").exists()
     assert not (target / ".codex" / "hooks.json").exists()
     assert (target / ".agents" / "skills" / "define-topic" / "SKILL.md").exists()
+
+
+def test_workspace_upgrade_recognizes_claude_only_legacy_schema(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    source = tmp_path / "claude-only-wiki"
+    CliRunner().invoke(app, ["init", str(source)])
+    (source / "WIKI.md").write_bytes(_workspace._legacy_schema(_workspace.LEGACY_PROSE_REFERENCES[1]))
+
+    _workspace.import_wiki(root, source, "claude-only")
+
+    target = root / "claude-only"
+    assert _workspace.WORKSPACE_PROSE_REFERENCE in (target / "WIKI.md").read_text()
+    assert not (target / ".claude" / "skills" / "prose-voice" / "SKILL.md").exists()
 
 
 def test_workspace_upgrade_preserves_duplicates_for_custom_schema(tmp_path):

@@ -15,7 +15,10 @@ from . import _skills, _upgrade
 
 MANIFEST_NAME = ".llm-wiki-workspace.json"
 SCHEMA_VERSION = 1
-LEGACY_PROSE_REFERENCE = "Follow the `prose-voice` skill (`.claude/skills/prose-voice/SKILL.md` in Claude Code or `.agents/skills/prose-voice/SKILL.md` in Codex)."
+LEGACY_PROSE_REFERENCES = (
+    "Follow the `prose-voice` skill (`.claude/skills/prose-voice/SKILL.md` in Claude Code or `.agents/skills/prose-voice/SKILL.md` in Codex).",
+    "Follow the `prose-voice` skill (`.claude/skills/prose-voice/SKILL.md`).",
+)
 WORKSPACE_PROSE_REFERENCE = "Follow the active `prose-voice` skill for this wiki. In a workspace, select the wiki before applying the shared root skill."
 DUPLICATE_INTEGRATIONS = (
     ".claude/settings.json",
@@ -45,10 +48,14 @@ def _workspace_upgrade_files() -> dict[str, tuple[bytes, bool]]:
     return {key: value for key, value in desired.items() if key in {"AGENTS.md", "CLAUDE.md"}}
 
 
-def _legacy_schema() -> bytes:
+def _legacy_schema(reference: str = LEGACY_PROSE_REFERENCES[0]) -> bytes:
     """The pre-workspace template, reconstructed from the current schema."""
     current = (files("wiki_cli") / "template" / "WIKI.md").read_text(encoding="utf-8")
-    return current.replace(WORKSPACE_PROSE_REFERENCE, LEGACY_PROSE_REFERENCE).encode()
+    return current.replace(WORKSPACE_PROSE_REFERENCE, reference).encode()
+
+
+def _is_legacy_schema(content: bytes) -> bool:
+    return content in {_legacy_schema(reference) for reference in LEGACY_PROSE_REFERENCES}
 
 
 def _manifest_path(root: Path) -> Path:
@@ -171,7 +178,7 @@ def _migration_notes(target: Path) -> list[str]:
     if not schema.is_file():
         return []
     current = schema.read_bytes()
-    if current == _legacy_schema():
+    if _is_legacy_schema(current):
         return ["will migrate WIKI.md and remove duplicate integrations"]
     if WORKSPACE_PROSE_REFERENCE not in current.decode("utf-8", errors="replace"):
         return ["retaining local integrations because WIKI.md is customized"]
@@ -227,9 +234,12 @@ def _workspace_upgrade(target: Path) -> str:
             managed[relative] = _digest(desired)
             changes.append(relative)
 
-    if schema.read_bytes() == _legacy_schema():
+    if _is_legacy_schema(schema.read_bytes()):
+        text = schema.read_text(encoding="utf-8")
+        for reference in LEGACY_PROSE_REFERENCES:
+            text = text.replace(reference, WORKSPACE_PROSE_REFERENCE)
         schema.write_text(
-            schema.read_text(encoding="utf-8").replace(LEGACY_PROSE_REFERENCE, WORKSPACE_PROSE_REFERENCE),
+            text,
             encoding="utf-8",
         )
         changes.append("migrated WIKI.md")
