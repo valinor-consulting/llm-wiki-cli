@@ -22,7 +22,7 @@ def package_version() -> str:
     try:
         return version("llm-wiki-cli")
     except PackageNotFoundError:
-        return "0.7.1"
+        return "0.7.2"
 
 
 def _digest(content: bytes) -> str:

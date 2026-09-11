@@ -9,7 +9,10 @@ from pathlib import Path
 
 import yaml
 
-WIKI_LINK = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")
+# Markdown tables require the label separator in a piped wiki link to be
+# escaped (``[[target\|label]]``). Accept that form as well as the ordinary
+# ``[[target|label]]`` form, without retaining the escape in the target.
+WIKI_LINK = re.compile(r"\[\[([^\]]+?)(?:\\?\|([^\]]+))?\]\]")
 MARKDOWN_LINK = re.compile(r"^\[([^\]]+)\]\(([^)]+)\)$")
 ROOT_MARKDOWN_LINK = re.compile(r"(\[[^\]]+\])\((/[^)]+)\)")
 FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.DOTALL)

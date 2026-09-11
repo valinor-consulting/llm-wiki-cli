@@ -171,10 +171,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.7.1")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.7.2")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.7.1"
+    assert result.output.strip() == "0.7.2"
 
 
 def _legacy_wiki(path):
@@ -652,6 +652,10 @@ updated: 2026-01-02
 
 See [[reference|the reference]].
 
+| Kind | Link |
+| --- | --- |
+| Source | [[reference\\|table reference]] |
+
 ## Citations
 
 Existing citation prose.
@@ -672,6 +676,7 @@ Existing citation prose.
     assert "sources:" not in converted
     assert "[notes.pdf](../../raw/notes.pdf)" in converted
     assert "[Reference](../sources/reference.md)" in converted
+    assert "| Source | [table reference](../sources/reference.md) |" in converted
     assert "## Related Concepts" in converted
     assert "Existing citation prose." in converted
     assert 'okf_version: "0.2"' in (wiki / "wiki" / "index.md").read_text()
