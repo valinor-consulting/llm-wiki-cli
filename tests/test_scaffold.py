@@ -171,10 +171,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.7.2")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.7.3")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.7.2"
+    assert result.output.strip() == "0.7.3"
 
 
 def _legacy_wiki(path):
@@ -686,6 +686,58 @@ Existing citation prose.
     repaired = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--wiki", "knowledge", "--apply"])
     assert repaired.exit_code == 0, repaired.output
     assert "[Reference](../sources/reference.md)" in page.read_text()
+
+
+def test_okf_migration_handles_code_topic_links_and_parenthesized_urls(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    wiki = root / "knowledge"
+    CliRunner().invoke(app, ["init", str(wiki)])
+    concepts = wiki / "wiki" / "concepts"
+    concepts.mkdir(exist_ok=True)
+    page = concepts / "topic.md"
+    page.write_text(
+        """---
+title: Topic
+type: concept
+sources:
+  - "[[TOPIC.md]]"
+  - "[Scrivener (Wikipedia)](https://en.wikipedia.org/wiki/Scrivener_(software))"
+related:
+  - "[[TOPIC.md]]"
+---
+
+Inline code is `[[ ]]` and is not a link.
+
+```text
+[[missing-in-code]]
+```
+""",
+        encoding="utf-8",
+    )
+    log = wiki / "wiki" / "log.md"
+    log.write_text("# Log\n\nCreated from [[TOPIC.md]].\n", encoding="utf-8")
+    manifest = json.loads((root / ".llm-wiki-workspace.json").read_text())
+    manifest["wikis"] = ["knowledge"]
+    (root / ".llm-wiki-workspace.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    result = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--apply"])
+
+    assert result.exit_code == 0, result.output
+    converted = page.read_text(encoding="utf-8")
+    assert "[[TOPIC.md]]" not in converted
+    assert "resource: https://en.wikipedia.org/wiki/Scrivener_(software)" in converted
+    assert "[Scrivener (Wikipedia)](https://en.wikipedia.org/wiki/Scrivener_(software))" in converted
+    assert "`[[ ]]`" in converted
+    assert "[[missing-in-code]]" in converted
+    assert "Created from [TOPIC.md](../TOPIC.md)." in log.read_text(encoding="utf-8")
+
+    repeated = CliRunner().invoke(app, ["workspace", "migrate-okf", str(root), "--apply"])
+
+    assert repeated.exit_code == 0, repeated.output
+    assert page.read_text(encoding="utf-8").count(
+        "[Scrivener (Wikipedia)](https://en.wikipedia.org/wiki/Scrivener_(software))"
+    ) == 1
 
 
 def test_okf_migration_blocks_all_selected_wikis_on_unresolved_link(tmp_path):

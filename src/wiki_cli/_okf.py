@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -13,9 +14,9 @@ import yaml
 # escaped (``[[target\|label]]``). Accept that form as well as the ordinary
 # ``[[target|label]]`` form, without retaining the escape in the target.
 WIKI_LINK = re.compile(r"\[\[([^\]]+?)(?:\\?\|([^\]]+))?\]\]")
-MARKDOWN_LINK = re.compile(r"^\[([^\]]+)\]\(([^)]+)\)$")
 ROOT_MARKDOWN_LINK = re.compile(r"(\[[^\]]+\])\((/[^)]+)\)")
 FRONTMATTER = re.compile(r"\A---\s*\n(.*?)\n---\s*\n?", re.DOTALL)
+FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 
 
 @dataclass
@@ -48,7 +49,7 @@ def _section(body: str, heading: str, entries: list[str]) -> str:
         following = re.search(r"(?m)^## ", body[match.end():])
         end = match.end() + following.start() if following else len(body)
         existing = body[match.end():end]
-        existing_targets = set(re.findall(r"\[[^\]]+\]\(([^)]+)\)", existing))
+        existing_targets = _section_link_targets(existing)
         additions = [entry for entry in entries if _link_target(entry) not in existing_targets]
         if not additions:
             return body
@@ -58,8 +59,102 @@ def _section(body: str, heading: str, entries: list[str]) -> str:
 
 
 def _link_target(link: str) -> str:
-    match = MARKDOWN_LINK.match(link)
-    return match.group(2) if match else link
+    parsed = _markdown_link(link)
+    return parsed[1] if parsed else link
+
+
+def _markdown_link(value: str) -> tuple[str, str] | None:
+    """Parse a complete Markdown link, including balanced URL parentheses."""
+    if not value.startswith("[") or not value.endswith(")"):
+        return None
+    separator = value.find("](")
+    if separator < 1:
+        return None
+    title = value[1:separator]
+    destination = value[separator + 2:-1]
+    if not destination:
+        return None
+    depth = 0
+    escaped = False
+    for character in destination:
+        if escaped:
+            escaped = False
+        elif character == "\\":
+            escaped = True
+        elif character == "(":
+            depth += 1
+        elif character == ")":
+            if depth == 0:
+                return None
+            depth -= 1
+    if depth or escaped:
+        return None
+    destination = re.sub(r"\\([()\\])", r"\1", destination)
+    return title, destination
+
+
+def _section_link_targets(value: str) -> set[str]:
+    targets: set[str] = set()
+    for line in value.splitlines():
+        candidate = line.strip()
+        if candidate.startswith("- "):
+            candidate = candidate[2:].strip()
+        parsed = _markdown_link(candidate)
+        if parsed:
+            targets.add(parsed[1])
+    return targets
+
+
+def _replace_inline_code(line: str, transform: Callable[[str], str]) -> str:
+    """Apply a text transformation outside Markdown inline-code spans."""
+    parts: list[str] = []
+    plain_start = cursor = 0
+    while cursor < len(line):
+        if line[cursor] != "`":
+            cursor += 1
+            continue
+        run_end = cursor + 1
+        while run_end < len(line) and line[run_end] == "`":
+            run_end += 1
+        marker = line[cursor:run_end]
+        closing = line.find(marker, run_end)
+        if closing < 0:
+            cursor = run_end
+            continue
+        parts.append(transform(line[plain_start:cursor]))
+        parts.append(line[cursor:closing + len(marker)])
+        cursor = closing + len(marker)
+        plain_start = cursor
+    parts.append(transform(line[plain_start:]))
+    return "".join(parts)
+
+
+def _replace_outside_code(text: str, transform: Callable[[str], str]) -> str:
+    """Apply a text transformation outside fenced and inline Markdown code."""
+    rendered: list[str] = []
+    fence_character: str | None = None
+    fence_length = 0
+    for line in text.splitlines(keepends=True):
+        match = FENCE.match(line)
+        if fence_character is not None:
+            rendered.append(line)
+            if (
+                match
+                and match.group(1)[0] == fence_character
+                and len(match.group(1)) >= fence_length
+                and not line[match.end():].strip()
+            ):
+                fence_character = None
+                fence_length = 0
+            continue
+        if match:
+            marker = match.group(1)
+            fence_character = marker[0]
+            fence_length = len(marker)
+            rendered.append(line)
+            continue
+        rendered.append(_replace_inline_code(line, transform))
+    return "".join(rendered)
 
 
 def _dedupe(items: list[str]) -> list[str]:
@@ -102,7 +197,7 @@ def build_plan(wiki_root: Path) -> MigrationPlan:
         if target in reserved and reserved[target].is_file():
             href = Path(os.path.relpath(reserved[target], owner.parent)).as_posix()
             return f"[{label or target}]({href})"
-        if target == "TOPIC" and (wiki_root.parent / "TOPIC.md").is_file():
+        if target in {"TOPIC", "TOPIC.md"} and (wiki_root.parent / "TOPIC.md").is_file():
             href = Path(os.path.relpath(wiki_root.parent / "TOPIC.md", owner.parent)).as_posix()
             return f"[{label or target}]({href})"
         if "." in target:
@@ -119,7 +214,8 @@ def build_plan(wiki_root: Path) -> MigrationPlan:
         return f"[{label or target}](/{target}.md)"
 
     def replace_links(text: str, owner: Path) -> str:
-        converted = WIKI_LINK.sub(lambda match: internal_link(match.group(1), match.group(2), owner), text)
+        def convert_wiki_links(value: str) -> str:
+            return WIKI_LINK.sub(lambda match: internal_link(match.group(1), match.group(2), owner), value)
 
         def relative_root_link(match: re.Match[str]) -> str:
             destination = match.group(2)
@@ -134,7 +230,10 @@ def build_plan(wiki_root: Path) -> MigrationPlan:
             href = Path(os.path.relpath(candidate, owner.parent)).as_posix()
             return f"{match.group(1)}({href}{separator}{fragment})"
 
-        return ROOT_MARKDOWN_LINK.sub(relative_root_link, converted)
+        return _replace_outside_code(
+            text,
+            lambda value: ROOT_MARKDOWN_LINK.sub(relative_root_link, convert_wiki_links(value)),
+        )
 
     changes: dict[Path, str] = {}
     for path in markdown:
@@ -184,15 +283,17 @@ def build_plan(wiki_root: Path) -> MigrationPlan:
                 if not isinstance(source, str):
                     issues.append(f"{path}: unsupported source entry")
                     continue
-                external = MARKDOWN_LINK.match(source)
-                if external and external.group(2).startswith(("https://", "http://")):
-                    title, resource = external.groups()
+                external = _markdown_link(source)
+                if external and external[1].startswith(("https://", "http://")):
+                    title, resource = external
                     structured.append({"resource": resource, "title": title})
-                    citations.append(source)
+                    citations.append(f"[{title}]({resource})")
                 else:
                     wiki = WIKI_LINK.fullmatch(source)
                     if wiki:
                         target, label = wiki.groups()
+                        if target == "TOPIC.md":
+                            continue
                         link = internal_link(target, label, path)
                         if target in slugs:
                             related.append(link)
@@ -209,6 +310,8 @@ def build_plan(wiki_root: Path) -> MigrationPlan:
                     issues.append(f"{path}: unsupported related entry '{item}'")
                     continue
                 target, label = wiki.groups()
+                if target == "TOPIC.md":
+                    continue
                 related.append(internal_link(target, label, path))
 
         existing_sources = frontmatter.get("sources")
