@@ -184,6 +184,7 @@ def research_init(
     """Create a lightweight research project at the workspace root."""
     slug = _workspace.init_research_project(Path(directory), name)
     console.print(f"[green]✓[/green] Created research project [bold]{slug}[/bold]")
+    console.print(f"Run [bold]/research-project {slug}[/bold] to define its research question and begin.")
 
 
 @research_app.command("status")

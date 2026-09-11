@@ -171,10 +171,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.7.3")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.7.4")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.7.3"
+    assert result.output.strip() == "0.7.4"
 
 
 def _legacy_wiki(path):
@@ -279,8 +279,13 @@ def test_workspace_init_creates_root_integrations_without_wiki(tmp_path):
     assert (root / "research" / ".gitkeep").exists()
     assert (root / "wikis" / ".gitkeep").exists()
     assert (root / ".agents" / "skills" / "select-wiki" / "SKILL.md").exists()
-    assert (root / ".agents" / "skills" / "research-project" / "SKILL.md").exists()
-    assert (root / ".claude" / "commands" / "research-project.md").exists()
+    research_skill = (root / ".agents" / "skills" / "research-project" / "SKILL.md").read_text()
+    research_command = (root / ".claude" / "commands" / "research-project.md").read_text()
+    assert "The project name identifies its directory; it is not the research question" in research_skill
+    assert "What specific question should this project answer?" in research_skill
+    assert "Do not begin research until" in research_skill
+    assert "What specific question should this project answer?" in research_command
+    assert "$ARGUMENTS" in research_command
     assert not (root / "TOPIC.md").exists()
 
 
@@ -324,6 +329,7 @@ def test_workspace_research_init_scaffolds_slugged_project_and_status(tmp_path):
     assert (project / "REPORT.md").is_file()
     assert (project / "SOURCES.md").is_file()
     assert "## References" in (project / "REPORT.md").read_text()
+    assert "/research-project compare-local-first-note-apps" in result.output
     assert _workspace.research_status(root) == [
         _workspace.ResearchStatus("compare-local-first-note-apps", "ready")
     ]

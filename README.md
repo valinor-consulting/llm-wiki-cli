@@ -15,7 +15,7 @@ uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git llm-wiki i
 Pin to a released tag for reproducibility:
 
 ```bash
-uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.7.3 llm-wiki init my-wiki
+uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.7.4 llm-wiki init my-wiki
 ```
 
 Install it as a persistent tool on your PATH:
@@ -80,7 +80,7 @@ llm-wiki --version
 
 ```bash
 uv tool install --force \
-  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.7.3 \
+  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.7.4 \
   llm-wiki-cli
 llm-wiki --version
 ```
@@ -151,14 +151,14 @@ llm-wiki workspace migrate-okf /path/to/wiki-workspace --wiki example-wiki --app
 Research projects are deliberately lighter than wikis and are never registered as wikis.
 
 ```bash
-llm-wiki workspace research init "Compare local-first note apps" \
+llm-wiki workspace research init "Local-first note apps" \
   --workspace /path/to/wiki-workspace                              # create research/<slug>/
 llm-wiki workspace research status /path/to/wiki-workspace         # list project readiness
 ```
 
-`workspace research init NAME` creates `research/<slug>/BRIEF.md`, `REPORT.md`, and `SOURCES.md`. The brief defines the question and constraints; the report is the evolving answer with a terminal `## References` section; the source ledger retains working source and verification notes.
+`workspace research init NAME` creates `research/<slug>/BRIEF.md`, `REPORT.md`, and `SOURCES.md`. `NAME` labels the project; it is not the research question. The brief defines the question and constraints; the report is the evolving answer with a terminal `## References` section; the source ledger retains working source and verification notes.
 
-From the workspace root, use `/research-project` in Claude Code or the Codex VS Code extension to create or resume a project. The workflow researches and refines only the chosen project directory. It does not modify a wiki or `insights/` unless you explicitly request promotion of the work.
+From the workspace root, use `/research-project` in Claude Code or the Codex VS Code extension to create or resume a project. If its brief is empty, the workflow asks for the actual research question and any necessary constraints, records them in `BRIEF.md`, and only then begins research. It researches and refines only the chosen project directory. It does not modify a wiki or `insights/` unless you explicitly request promotion of the work.
 
 ### Current-directory defaults
 

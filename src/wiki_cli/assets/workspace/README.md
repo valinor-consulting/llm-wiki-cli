@@ -52,15 +52,15 @@ Imports copy the working tree except `.git`; they do not perform Git operations.
 ### Start a research project
 
 ```bash
-llm-wiki workspace research init "Compare local-first note apps"  # create research/compare-local-first-note-apps/
-llm-wiki workspace research status                                  # list project readiness
+llm-wiki workspace research init "Local-first note apps"  # create research/local-first-note-apps/
+llm-wiki workspace research status                        # list project readiness
 ```
 
-Then, in Claude Code or the Codex VS Code extension, run `/research-project`. Name `compare-local-first-note-apps` when prompted, or say:
+The CLI argument is only the project name; it is not treated as the research question. Then, in Claude Code or the Codex VS Code extension, run `/research-project`. Name `local-first-note-apps` when prompted. The workflow will ask for the actual research question and any necessary constraints, then write them to `research/local-first-note-apps/BRIEF.md` before researching. You can also provide everything up front:
 
-> Continue the `compare-local-first-note-apps` research project. Research the brief, record useful sources, and refine the report.
+> Continue the `local-first-note-apps` research project. Research question: Which local-first note apps support end-to-end encryption and conflict-free offline editing on macOS and Android?
 
-The workflow reads the project's `BRIEF.md`, `REPORT.md`, and `SOURCES.md`, researches iteratively, records working source notes, and maintains a report with a terminal `## References` section. It edits only that project unless you explicitly request promotion into `insights/` or a selected wiki.
+The workflow reads the project's `BRIEF.md`, `REPORT.md`, and `SOURCES.md`, completes an empty brief with you, researches iteratively, records working source notes, and maintains a report with a terminal `## References` section. It edits only that project unless you explicitly request promotion into `insights/` or a selected wiki.
 
 ## Keep the workspace current
 
