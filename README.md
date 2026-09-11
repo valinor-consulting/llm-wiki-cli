@@ -15,7 +15,7 @@ uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git llm-wiki i
 Pin to a released tag for reproducibility:
 
 ```bash
-uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.7.0 llm-wiki init my-wiki
+uvx --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.7.1 llm-wiki init my-wiki
 ```
 
 Install it as a persistent tool on your PATH:
@@ -80,7 +80,7 @@ llm-wiki --version
 
 ```bash
 uv tool install --force \
-  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.7.0 \
+  --from git+https://github.com/valinor-consulting/llm-wiki-cli.git@v0.7.1 \
   llm-wiki-cli
 llm-wiki --version
 ```
@@ -134,6 +134,8 @@ Open the mono-repo root in Claude Code or Codex. For wiki work, name the registe
 | `llm-wiki workspace upgrade ROOT --apply` | The workspace root plus every registered wiki. |
 
 Legacy workspaces whose registered wikis are direct children of the root are migrated to `wikis/<name>/` by the normal workspace upgrade. The move is included in the preview and happens only with `--apply`. Any managed-file conflict, invalid wiki, or occupied `wikis/<name>/` destination stops the complete requested upgrade before changes are written.
+
+Workspace upgrade also recognizes generated schemas from the older Obsidian-era template family. For those files it updates only the workspace-specific `prose-voice` reference; it does not replace the rest of `WIKI.md`. Unrecognized schemas remain classified as customized, and their wiki-local integrations are preserved. Converting a wiki's schema and corpus to OKF remains a separate `workspace migrate-okf` operation.
 
 ### Migrate wiki content to OKF
 

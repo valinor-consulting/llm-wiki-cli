@@ -25,6 +25,13 @@ LEGACY_PROSE_REFERENCES = (
     "Follow the `prose-voice` skill (`.claude/skills/prose-voice/SKILL.md`).",
 )
 WORKSPACE_PROSE_REFERENCE = "Follow the active `prose-voice` skill for this wiki. In a workspace, select the wiki before applying the shared root skill."
+LEGACY_OBSIDIAN_SCHEMA_MARKERS = (
+    "## Frontmatter Schema\n",
+    "**Formatting rule — `sources:` and `related:` MUST use a block list",
+    "**Internal links** (between wiki files): Obsidian wiki syntax",
+    "## index.md Format\n",
+    "## log.md Format\n",
+)
 DUPLICATE_INTEGRATIONS = (
     ".claude/settings.json",
     ".claude/hooks/guard-blank-edits.py",
@@ -73,7 +80,21 @@ def _legacy_schema(reference: str = LEGACY_PROSE_REFERENCES[0]) -> bytes:
 
 
 def _is_legacy_schema(content: bytes) -> bool:
-    return content in {_legacy_schema(reference) for reference in LEGACY_PROSE_REFERENCES}
+    if content in {_legacy_schema(reference) for reference in LEGACY_PROSE_REFERENCES}:
+        return True
+
+    # Before workspace support, generated wikis used an Obsidian-specific
+    # schema. Some versions also included project boilerplate, example log
+    # entries, or minor formatting variations. Those are template history,
+    # not user customization, so recognize the family rather than requiring a
+    # byte-for-byte match. Requiring all structural markers and the old skill
+    # reference keeps an unrelated custom schema out of this migration path.
+    text = content.decode("utf-8", errors="replace")
+    return (
+        WORKSPACE_PROSE_REFERENCE not in text
+        and any(reference in text for reference in LEGACY_PROSE_REFERENCES)
+        and all(marker in text for marker in LEGACY_OBSIDIAN_SCHEMA_MARKERS)
+    )
 
 
 def _manifest_path(root: Path) -> Path:
@@ -481,10 +502,7 @@ def _workspace_upgrade(target: Path) -> str:
         text = schema.read_text(encoding="utf-8")
         for reference in LEGACY_PROSE_REFERENCES:
             text = text.replace(reference, WORKSPACE_PROSE_REFERENCE)
-        schema.write_text(
-            text,
-            encoding="utf-8",
-        )
+        schema.write_text(text, encoding="utf-8")
         changes.append("migrated WIKI.md")
 
     if WORKSPACE_PROSE_REFERENCE in schema.read_text(encoding="utf-8", errors="replace"):

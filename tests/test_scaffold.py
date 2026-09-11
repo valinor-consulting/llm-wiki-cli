@@ -171,10 +171,10 @@ def test_init_no_skills_keeps_entrypoints_only(tmp_path):
 
 
 def test_version_option(monkeypatch):
-    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.7.0")
+    monkeypatch.setattr(_upgrade, "package_version", lambda: "0.7.1")
     result = CliRunner().invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert result.output.strip() == "0.7.0"
+    assert result.output.strip() == "0.7.1"
 
 
 def _legacy_wiki(path):
@@ -545,6 +545,67 @@ def test_workspace_upgrade_recognizes_claude_only_legacy_schema(tmp_path):
     target = root / "wikis" / "claude-only"
     assert _workspace.WORKSPACE_PROSE_REFERENCE in (target / "WIKI.md").read_text()
     assert not (target / ".claude" / "skills" / "prose-voice" / "SKILL.md").exists()
+
+
+def test_workspace_upgrade_migrates_historical_obsidian_schema_variants(tmp_path):
+    root = tmp_path / "workspace"
+    _workspace.init(root)
+    target = root / "wikis" / "historic"
+    CliRunner().invoke(app, ["init", str(target)])
+    manifest_path = root / ".llm-wiki-workspace.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["wikis"] = ["wikis/historic"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    schema = (target / "WIKI.md").read_text(encoding="utf-8")
+    start = schema.index("## OKF Document Format")
+    end = schema.index("## Writing Style")
+    historic_format = """## Frontmatter Schema
+
+Every file written in `wiki/` must include YAML frontmatter.
+
+**Formatting rule — `sources:` and `related:` MUST use a block list with each item double-quoted**.
+
+---
+
+## Link Conventions
+
+- **Internal links** (between wiki files): Obsidian wiki syntax — `[[filename|Display Text]]`.
+
+---
+
+"""
+    schema = schema[:start] + historic_format + schema[end:]
+    schema = schema.replace(
+        _workspace.WORKSPACE_PROSE_REFERENCE,
+        _workspace.LEGACY_PROSE_REFERENCES[1],
+    )
+    schema = schema.replace(
+        "**Human role:** Source curation, questions, direction.",
+        "**Primary deliverable:** Historical generated project boilerplate.\n\n"
+        "**Human role:** Source curation, questions, direction.",
+    )
+    schema += "\n## index.md Format\n\nHistoric index instructions.\n\n## log.md Format\n\nHistoric log instructions.\n"
+    (target / "WIKI.md").write_text(schema, encoding="utf-8")
+
+    status = CliRunner().invoke(app, ["workspace", "status", str(root)])
+    preview = CliRunner().invoke(app, ["workspace", "upgrade", str(root)])
+
+    assert status.exit_code == 0, status.output
+    assert "will migrate WIKI.md" in status.output
+    assert preview.exit_code == 0, preview.output
+    assert "will migrate WIKI.md" in preview.output
+    assert (target / "WIKI.md").read_text(encoding="utf-8") == schema
+
+    result = CliRunner().invoke(app, ["workspace", "upgrade", str(root), "--apply"])
+
+    assert result.exit_code == 0, result.output
+    expected = schema.replace(
+        _workspace.LEGACY_PROSE_REFERENCES[1],
+        _workspace.WORKSPACE_PROSE_REFERENCE,
+    )
+    assert (target / "WIKI.md").read_text(encoding="utf-8") == expected
+    assert "Historical generated project boilerplate." in expected
+    assert not (target / ".agents" / "skills" / "prose-voice" / "SKILL.md").exists()
 
 
 def test_workspace_upgrade_preserves_duplicates_for_custom_schema(tmp_path):
